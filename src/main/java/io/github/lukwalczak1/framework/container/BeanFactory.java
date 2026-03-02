@@ -11,8 +11,6 @@ public class BeanFactory {
 
     private Map<Class<?>, Object> beans = new HashMap<>();
 
-    private List<Class<?>> beansClassInfo = new ArrayList<>();
-
     private static String basePackage = "io.github.lukwalczak1";
 
     public static BeanFactory getInstance() {
@@ -22,69 +20,79 @@ public class BeanFactory {
         return instance;
     }
 
-    public void registerBean(Class<?> objectClass, Object instance) {
+    public void initContext(String basePackage) {
+        scanForBeans();
+    }
+
+    private void registerBean(Class<?> objectClass, Object instance) {
         beans.put(objectClass, instance);
+        System.out.println("Registered bean: " + objectClass.getName());
     }
 
     public Set<Class<?>> getRegisteredBeans() {
         return beans.keySet();
     }
 
-    public <T> T getBean(Class<T> objectClass){
+    public <T> T getBean(Class<T> objectClass) {
         return (T) beans.get(objectClass);
     }
 
-    public void scanBeansForDependencies(){
-        for( Class<?> clazz : beansClassInfo){
-            Constructor<?>[] classConstructors = clazz.getConstructors();
-            for(Constructor<?> constructor : classConstructors){
-                if(constructor.isAnnotationPresent(io.github.lukwalczak1.framework.annotation.Inject.class)){
-                    Parameter[] parameters = constructor.getParameters();
-                    List<Object> dependencies = new ArrayList<>();
-            }
+    private <T> T getOrCreateBean(Class<T> objectClass){
+        if(beans.containsKey(objectClass)){
+            return objectClass.cast(beans.get(objectClass));
         }
-    }}
+        try{
+            Constructor<?> constructor = objectClass.getDeclaredConstructors()[0];
+            Class<?>[] parameterTypes = constructor.getParameterTypes();
+            Object[] parameters = new Object[parameterTypes.length];
+            for (int i = 0; i < parameterTypes.length; i++) {
+                parameters[i] = getOrCreateBean(parameterTypes[i]);
+            }
+            T instance = (T) constructor.newInstance(parameters);
+            registerBean(objectClass, instance);
+            return instance;
+        }catch (Exception e){
+            e.printStackTrace();
+            throw new RuntimeException("Failed to create bean for class: " + objectClass.getName());
+        }
+    }
 
-    public void scanForBeans(){
+
+    private void scanForBeans() {
         List<String> annotationNames = scanForAvailableAnnotations();
         System.out.println("Found annotations: " + annotationNames);
-        for(String annotationName : annotationNames){
-                try(ScanResult scanResult = new ClassGraph()
-                        .acceptPackages(basePackage)
-                        .enableClassInfo()
-                        .enableAnnotationInfo()
-                        .scan()){
-                    ClassInfoList annotatedClasses = scanResult.getClassesWithAnnotation(annotationName);
-                    annotatedClasses.forEach(classInfo->{
-                        try{
-                            Class<?> clazz = classInfo.loadClass();
-                            beansClassInfo.add(clazz);
-                        }catch (Exception e){
-                            e.printStackTrace();
-                        }
-                    });
-                }
+        try (ScanResult scanResult = new ClassGraph()
+                .acceptPackages(basePackage)
+                .enableClassInfo()
+                .enableAnnotationInfo()
+                .scan()) {
+            Set<Class<?>> annotatedClasses = new HashSet<>();
+            annotationNames.forEach( annotationName -> {
+               scanResult.getAllClasses()
+                       .filter(classInfo -> classInfo.hasAnnotation(annotationName))
+                       .forEach(classInfo -> {
+                           annotatedClasses.add(classInfo.loadClass());
+                       });
+            });
+            System.out.println("Found annotated classes: " + annotatedClasses);
+            annotatedClasses.forEach(this::getOrCreateBean);
         }
     }
 
     public List<String> scanForAvailableAnnotations() {
-        try(ScanResult scanResult = new ClassGraph()
-                .acceptPackages(basePackage)
+        try (ScanResult scanResult = new ClassGraph()
+                .acceptPackages("io.github.lukwalczak1.framework.annotation.beans")
                 .enableClassInfo()
                 .scan()) {
             return scanResult
                     .getAllClasses()
                     .filter(ClassInfo::isAnnotation)
                     .getNames();
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
             return List.of();
         }
 
-    }
-
-    public void setBasePackage(String basePackage) {
-        this.basePackage = basePackage;
     }
 
 }
