@@ -4,8 +4,6 @@ import java.util.*;
 import java.lang.reflect.*;
 
 import io.github.classgraph.*;
-import io.github.lukwalczak1.framework.annotation.beans.Controller;
-
 
 public class BeanFactory {
     private static BeanFactory instance;
