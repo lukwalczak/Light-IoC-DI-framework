@@ -1,11 +1,13 @@
 package io.github.lukwalczak1.framework.web;
 
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import io.github.lukwalczak1.framework.container.BeanFactory;
 import io.github.lukwalczak1.framework.annotation.RequestMapping;
 import io.github.lukwalczak1.framework.annotation.beans.Controller;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -44,7 +46,6 @@ public class DispatcherHandler implements HttpHandler {
         });
     }
 
-
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         System.out.println("Handling request: " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -54,20 +55,34 @@ public class DispatcherHandler implements HttpHandler {
         if (invocation != null) {
             try {
                 Object result = invocation.invoke();
-                String response = result != null ? result.toString() : "";
-                exchange.sendResponseHeaders(200, response.getBytes().length);
-                exchange.getResponseBody().write(response.getBytes());
+                sendResponse(exchange, result);
             } catch (Exception e) {
-                e.printStackTrace();
-                String response = "Internal Server Error";
-                exchange.sendResponseHeaders(500, response.getBytes().length);
-                exchange.getResponseBody().write(response.getBytes());
+                System.out.println("Error invoking method: " + e);
+                sendResponse(exchange, 500, "Internal Server Error");
             }
         } else {
-            String response = "Not Found";
-            exchange.sendResponseHeaders(404, response.getBytes().length);
-            exchange.getResponseBody().write(response.getBytes());
+            sendResponse(exchange, 404, "Not Found");
         }
         exchange.close();
+    }
+
+    private void sendResponse(HttpExchange exchange, Object invocationResult) throws IOException {
+        if( !(invocationResult instanceof ResponseEntity<?> responseEntity)){
+            sendResponse(exchange, 200, invocationResult.toString());
+            return;
+        }
+        if(responseEntity.getBody() instanceof String){
+            exchange.sendResponseHeaders(responseEntity.getStatusCode(), responseEntity.getBody().toString().getBytes().length);
+            exchange.getResponseBody().write(responseEntity.getBody().toString().getBytes());
+        }
+    }
+
+    private void sendResponse(HttpExchange exchange, int statusCode) throws IOException {
+        exchange.sendResponseHeaders(statusCode, -1);
+    }
+
+    private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
+        exchange.sendResponseHeaders(statusCode, response.getBytes().length);
+        exchange.getResponseBody().write(response.getBytes());
     }
 }

@@ -24,5 +24,13 @@ public class ApplicationContext {
         return instance;
     }
 
+    public void startApplication(int port, String basePackage) {
+        beanFactory = BeanFactory.getInstance();
+        beanFactory.initContext(basePackage);
+        dispatcherHandler = new DispatcherHandler(beanFactory);
+        HttpServerManager serverManager = new HttpServerManager(8080, dispatcherHandler);
+        serverManager.startHttpServer(dispatcherHandler);
+    }
+
 
 }
