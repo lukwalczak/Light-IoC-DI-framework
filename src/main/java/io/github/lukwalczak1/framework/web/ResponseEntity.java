@@ -17,6 +17,10 @@ public class ResponseEntity<T> {
         return new ResponseEntity<>(statusCode, body);
     }
 
+    public static <T> ResponseEntity<T> ok() {
+        return new ResponseEntity<>(200, null);
+    }
+
     public T getBody() {
         return body;
     }
