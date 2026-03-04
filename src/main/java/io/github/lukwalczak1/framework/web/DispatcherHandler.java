@@ -1,19 +1,21 @@
 package io.github.lukwalczak1.framework.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import io.github.lukwalczak1.framework.annotation.RequestBody;
-import io.github.lukwalczak1.framework.annotation.RequestPath;
+import io.github.lukwalczak1.framework.annotation.web.RequestBody;
+import io.github.lukwalczak1.framework.annotation.web.PathVariable;
 import io.github.lukwalczak1.framework.container.BeanFactory;
-import io.github.lukwalczak1.framework.annotation.RequestMapping;
+import io.github.lukwalczak1.framework.annotation.web.RequestMapping;
 import io.github.lukwalczak1.framework.annotation.beans.Controller;
+import io.github.lukwalczak1.framework.interceptor.HandlerInterceptor;
+
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 public class DispatcherHandler implements HttpHandler {
 
@@ -23,8 +25,11 @@ public class DispatcherHandler implements HttpHandler {
 
     private final BeanFactory beanFactory;
 
+    private final List<HandlerInterceptor> handlerInterceptors = new ArrayList<>();
+
     public DispatcherHandler(BeanFactory beanFactory) {
         this.beanFactory = beanFactory;
+        handlerInterceptors.addAll(beanFactory.getBeansOfType(HandlerInterceptor.class));
         System.out.println("Initializing DispatcherHandler with BeanFactory: " + beanFactory);
         registerRoutes();
     }
@@ -33,24 +38,28 @@ public class DispatcherHandler implements HttpHandler {
         routes.put(method + ":" + path, invocation);
     }
 
-    private void registerRoutes(){
-        beanFactory.getRegisteredBeans().forEach( bean -> {
-            if(bean.isAnnotationPresent(Controller.class)){
+    private void registerRoutes() {
+        beanFactory.getRegisteredBeans().forEach(beanClass -> {
+            if (beanClass.isAnnotationPresent(Controller.class)) {
+                Object beanInstance = beanFactory.getBean(beanClass);
+                Class<?> targetClass = beanClass.getName().contains("ByteBuddy")
+                        ? beanClass.getSuperclass()
+                        : beanClass;
                 String basePath = "";
-                if(bean.isAnnotationPresent(RequestMapping.class)){
-                    basePath = bean.getAnnotation(RequestMapping.class).value();
+                if (targetClass.isAnnotationPresent(RequestMapping.class)) {
+                    basePath = targetClass.getAnnotation(RequestMapping.class).value();
                 }
-                for( Method method : bean.getDeclaredMethods()){
-                    if(method.isAnnotationPresent(RequestMapping.class)){
+
+                for (Method method : targetClass.getDeclaredMethods()) {
+                    if (method.isAnnotationPresent(RequestMapping.class)) {
                         RequestMapping reqMapping = method.getAnnotation(RequestMapping.class);
                         String fullPath = basePath + reqMapping.value();
-                        registerRoute(fullPath, reqMapping.method(), new MethodInvocation(beanFactory.getBean(bean), method));
+                        registerRoute(fullPath, reqMapping.method(), new MethodInvocation(beanInstance, method));
                     }
                 }
             }
         });
     }
-
     public Object[] determineInvocationArgs(MethodInvocation invocation, HttpExchange exchange) throws IOException {
         Method method = invocation.getMethod();
         Class<?>[] paramTypes = method.getParameterTypes();
@@ -58,7 +67,7 @@ public class DispatcherHandler implements HttpHandler {
         String requestBody = exchange.getRequestBody() != null ? new String(exchange.getRequestBody().readAllBytes()) : "";
         String path = exchange.getRequestURI().getPath();
         for(int i = 0; i < paramTypes.length; i++){
-            if(paramTypes[i] == String.class && method.getParameters()[i].isAnnotationPresent(RequestPath.class)){
+            if(paramTypes[i] == String.class && method.getParameters()[i].isAnnotationPresent(PathVariable.class)){
                 args[i] = path;
             }else if(method.getParameters()[i].isAnnotationPresent(RequestBody.class)){
                 try {
@@ -74,9 +83,27 @@ public class DispatcherHandler implements HttpHandler {
         return args;
     }
 
+    public void preHandle(HttpExchange exchange) throws IOException{
+        for(HandlerInterceptor interceptor : handlerInterceptors){
+            if(!interceptor.preHandle(exchange)){
+                sendResponse(exchange, 403, "Forbidden");
+                exchange.close();
+                return;
+            }
+        }
+    }
+
+    public void postHandle(HttpExchange exchange) {
+        for(HandlerInterceptor interceptor : handlerInterceptors){
+            interceptor.postHandle(exchange);
+        }
+    }
+
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         System.out.println("Handling request: " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
+        // Handler inceptors logic
+
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
         MethodInvocation invocation = routes.get(method + ":" + path);
@@ -85,8 +112,12 @@ public class DispatcherHandler implements HttpHandler {
                 Object[] args = determineInvocationArgs(invocation, exchange);
                 sendResponse(exchange, invocation.invoke(args));
             } catch (Exception e) {
-                System.out.println("Error invoking method: " + e);
-                sendResponse(exchange, 500, "Internal Server Error");
+                if (e.getCause() != null) {
+                    System.err.println("Cause of failure: ");
+                    e.getCause().printStackTrace();
+                } else {
+                    e.printStackTrace();
+                }
             }
         } else {
             sendResponse(exchange, 404, "Not Found");

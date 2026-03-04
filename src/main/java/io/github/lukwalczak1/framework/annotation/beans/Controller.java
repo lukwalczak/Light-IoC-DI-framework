@@ -1,7 +1,5 @@
 package io.github.lukwalczak1.framework.annotation.beans;
 
-import io.github.lukwalczak1.framework.annotation.RequestMapping;
-
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
