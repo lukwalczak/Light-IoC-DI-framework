@@ -5,6 +5,7 @@ import java.lang.reflect.*;
 
 import io.github.classgraph.*;
 import io.github.lukwalczak1.framework.annotation.Inject;
+import io.github.lukwalczak1.framework.annotation.PostConstruct;
 import io.github.lukwalczak1.framework.annotation.interceptor.PostInvoke;
 import io.github.lukwalczak1.framework.annotation.interceptor.PreInvoke;
 import net.bytebuddy.ByteBuddy;
@@ -146,6 +147,14 @@ public class BeanFactory {
 
             // Field Injection
             populateClassFields(instance, targetClass);
+
+            // PostConstruct
+            for (Method m : targetClass.getDeclaredMethods()) {
+                if (m.isAnnotationPresent(PostConstruct.class)) {
+                    m.setAccessible(true);
+                    m.invoke(instance);
+                }
+            }
 
             // AOP Proxy
             Object proxyInstance = wrapWithProxy(instance, targetClass);
