@@ -45,6 +45,23 @@ public class BeanFactory {
         return (T) beans.get(objectClass);
     }
 
+    private void populateClassFields(Object object, Class<?> clazz){
+        Class<?> currentClass = clazz;
+        while (currentClass != null && currentClass != Object.class) {
+            for(Field field : currentClass.getDeclaredFields()){
+                if(field.isAnnotationPresent(Inject.class)){
+                    Object dependency = getOrCreateBean(field.getType());
+                    field.setAccessible(true);
+                    try {
+                        field.set(object, dependency);
+                    }catch (Exception e){
+                        throw new RuntimeException("Failed to inject dependency: " + field.getType().getName() + " into " + clazz.getName(), e);
+                    }
+                }
+            }
+        currentClass = currentClass.getSuperclass();
+        }
+    }
     private Object wrapWithProxy(Object instance, Class<?> beanClass) {
         boolean hasInterceptor = Arrays.stream(beanClass.getDeclaredMethods()).anyMatch(
                 method -> method.isAnnotationPresent(PreInvoke.class) || method.isAnnotationPresent(PostInvoke.class)
@@ -127,6 +144,10 @@ public class BeanFactory {
 
             Object instance = constructor.newInstance(parameters);
 
+            // Field Injection
+            populateClassFields(instance, targetClass);
+
+            // AOP Proxy
             Object proxyInstance = wrapWithProxy(instance, targetClass);
 
             beans.put(objectClass, proxyInstance);
