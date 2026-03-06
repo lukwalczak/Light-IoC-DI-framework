@@ -4,8 +4,9 @@ import java.util.*;
 import java.lang.reflect.*;
 
 import io.github.classgraph.*;
-import io.github.lukwalczak1.framework.annotation.Inject;
+import io.github.lukwalczak1.framework.annotation.injection.Inject;
 import io.github.lukwalczak1.framework.annotation.PostConstruct;
+import io.github.lukwalczak1.framework.annotation.injection.Value;
 import io.github.lukwalczak1.framework.annotation.interceptor.PostInvoke;
 import io.github.lukwalczak1.framework.annotation.interceptor.PreInvoke;
 import net.bytebuddy.ByteBuddy;
@@ -20,6 +21,8 @@ public class BeanFactory {
     private Map<Class<?>, Class<?>> interfaceToImpl = new HashMap<>();
 
     private static String basePackage = "io.github.lukwalczak1";
+
+    private final PropertyResolver propertyResolver = new PropertyResolver();
 
     public static BeanFactory getInstance() {
         if (instance == null) {
@@ -52,15 +55,34 @@ public class BeanFactory {
             for(Field field : currentClass.getDeclaredFields()){
                 if(field.isAnnotationPresent(Inject.class)){
                     Object dependency = getOrCreateBean(field.getType());
-                    field.setAccessible(true);
-                    try {
-                        field.set(object, dependency);
-                    }catch (Exception e){
-                        throw new RuntimeException("Failed to inject dependency: " + field.getType().getName() + " into " + clazz.getName(), e);
+                    injectValue(field, object, dependency);
+                } else if (field.isAnnotationPresent(Value.class)) {
+                    String key = field.getAnnotation(Value.class).value();
+                    String value = propertyResolver.resolve(key);
+                    if (value != null) {
+                        injectValue(field, object, convert(field.getType(), value));
                     }
                 }
             }
         currentClass = currentClass.getSuperclass();
+        }
+    }
+
+    private Object convert(Class<?> targetType, String value){
+        if (targetType == int.class || targetType == Integer.class) {
+            return Integer.parseInt(value);
+        } else if (targetType == boolean.class || targetType == Boolean.class) {
+            return Boolean.parseBoolean(value);
+        }
+        return value;
+    }
+
+    private void injectValue(Field field, Object target, Object value){
+        try {
+            field.setAccessible(true);
+            field.set(target, value);
+        }catch (Exception e){
+            throw new RuntimeException("Failed to inject dependency: " + field.getType().getName() + " into " + target.getClass(), e);
         }
     }
     private Object wrapWithProxy(Object instance, Class<?> beanClass) {
@@ -155,6 +177,7 @@ public class BeanFactory {
                     m.invoke(instance);
                 }
             }
+
 
             // AOP Proxy
             Object proxyInstance = wrapWithProxy(instance, targetClass);
