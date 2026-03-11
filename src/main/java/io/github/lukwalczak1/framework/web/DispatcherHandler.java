@@ -87,22 +87,6 @@ public class DispatcherHandler implements HttpHandler {
         return args;
     }
 
-    public void preHandle(HttpExchange exchange) throws IOException{
-        for(HandlerInterceptor interceptor : handlerInterceptors){
-            if(!interceptor.preHandle(exchange)){
-                sendResponse(exchange, 403, "Forbidden");
-                exchange.close();
-                return;
-            }
-        }
-    }
-
-    public void postHandle(HttpExchange exchange) {
-        for(HandlerInterceptor interceptor : handlerInterceptors){
-            interceptor.postHandle(exchange);
-        }
-    }
-
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         System.out.println("Handling request: " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
