@@ -3,6 +3,7 @@ package io.github.lukwalczak1.framework.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import io.github.lukwalczak1.framework.annotation.beans.ControllerAdvice;
 import io.github.lukwalczak1.framework.annotation.exception.ExceptionHandler;
 import io.github.lukwalczak1.framework.annotation.web.RequestBody;
 import io.github.lukwalczak1.framework.annotation.web.PathVariable;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class DispatcherHandler implements HttpHandler {
 
@@ -126,12 +128,18 @@ public class DispatcherHandler implements HttpHandler {
         exchange.close();
     }
 
+    private List<Class<?>> getBeanClassesWithAnnotation(Class<? extends java.lang.annotation.Annotation> annotation) {
+        return beanFactory.getRegisteredBeans().
+                stream().filter(beanClass -> beanClass.isAnnotationPresent(annotation)).collect(Collectors.toList());
+    }
+
     private void handleException(HttpExchange exchange, Class<?> controllerClass, Throwable exception) throws IOException {
         //Unwrap exception to find the root
         while(exception instanceof InvocationTargetException && exception.getCause() != null){
             exception = exception.getCause();
         }
 
+        // Implementation in controller has priority over global handlers
         for( Method method : controllerClass.getDeclaredMethods()){
             if(method.isAnnotationPresent(ExceptionHandler.class)){
                 Class<? extends Throwable> handledException = method.getAnnotation(ExceptionHandler.class).value();
@@ -147,11 +155,36 @@ public class DispatcherHandler implements HttpHandler {
                     }catch (Exception e){
                         System.out.println("Error invoking exception handler: " + e);
                         sendResponse(exchange, 500, "Internal Server Error");
+                        return;
                     }
                 }
 
             }
         }
+        List<Class<?>> controllerAdviceClasses = getBeanClassesWithAnnotation(ControllerAdvice.class);
+        // global exception handlers
+        for(Class<?> advice : controllerAdviceClasses){
+            for(Method method : advice.getDeclaredMethods()){
+                if(method.isAnnotationPresent(ExceptionHandler.class)){
+                    Class<? extends Throwable> handledException = method.getAnnotation(ExceptionHandler.class).value();
+                    if(handledException.isAssignableFrom(exception.getClass())){
+                        try{
+                            Object instance = beanFactory.getBean(advice);
+                            Object result = method.invoke(instance, exception);
+                            if(result != null){
+                                sendResponse(exchange, result);
+                                return;
+                            }
+                        }catch (Exception e){
+                            sendResponse(exchange, 500, "Internal Server Error");
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+
         //Unhandled exception, return generic error response
         sendResponse(exchange, 500, "Internal Server Error");
     }
