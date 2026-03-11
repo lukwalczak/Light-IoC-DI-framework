@@ -3,6 +3,7 @@ package io.github.lukwalczak1.framework.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import io.github.lukwalczak1.framework.annotation.exception.ExceptionHandler;
 import io.github.lukwalczak1.framework.annotation.web.RequestBody;
 import io.github.lukwalczak1.framework.annotation.web.PathVariable;
 import io.github.lukwalczak1.framework.container.BeanFactory;
@@ -11,6 +12,7 @@ import io.github.lukwalczak1.framework.annotation.beans.Controller;
 import io.github.lukwalczak1.framework.interceptor.HandlerInterceptor;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -102,8 +104,7 @@ public class DispatcherHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         System.out.println("Handling request: " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
-        // Handler inceptors logic
-
+        // Handler interceptors logic
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
         MethodInvocation invocation = routes.get(method + ":" + path);
@@ -112,17 +113,47 @@ public class DispatcherHandler implements HttpHandler {
                 Object[] args = determineInvocationArgs(invocation, exchange);
                 sendResponse(exchange, invocation.invoke(args));
             } catch (Exception e) {
-                if (e.getCause() != null) {
-                    System.err.println("Cause of failure: ");
-                    e.getCause().printStackTrace();
-                } else {
-                    e.printStackTrace();
+                Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
+                Class<?> controllerClass = invocation.getInstance().getClass();
+                if (controllerClass.getName().contains("ByteBuddy")) {
+                    controllerClass = controllerClass.getSuperclass();
                 }
+                handleException(exchange, controllerClass, cause);
             }
         } else {
             sendResponse(exchange, 404, "Not Found");
         }
         exchange.close();
+    }
+
+    private void handleException(HttpExchange exchange, Class<?> controllerClass, Throwable exception) throws IOException {
+        //Unwrap exception to find the root
+        while(exception instanceof InvocationTargetException && exception.getCause() != null){
+            exception = exception.getCause();
+        }
+
+        for( Method method : controllerClass.getDeclaredMethods()){
+            if(method.isAnnotationPresent(ExceptionHandler.class)){
+                Class<? extends Throwable> handledException = method.getAnnotation(ExceptionHandler.class).value();
+                System.out.println(handledException.getName() + " vs " + exception.getClass().getName());
+                if(handledException.isAssignableFrom(exception.getClass())){
+                    try{
+                        Object handlerInstance = beanFactory.getBean(controllerClass);
+                        Object result = method.invoke(handlerInstance, exception);
+                        if(result != null){
+                            sendResponse(exchange, result);
+                            return;
+                        }
+                    }catch (Exception e){
+                        System.out.println("Error invoking exception handler: " + e);
+                        sendResponse(exchange, 500, "Internal Server Error");
+                    }
+                }
+
+            }
+        }
+        //Unhandled exception, return generic error response
+        sendResponse(exchange, 500, "Internal Server Error");
     }
 
     private void sendResponse(HttpExchange exchange, Object invocationResult) throws IOException {

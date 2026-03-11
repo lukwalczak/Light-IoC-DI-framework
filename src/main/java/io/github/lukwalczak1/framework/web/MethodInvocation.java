@@ -9,4 +9,8 @@ public record MethodInvocation(Object instance, java.lang.reflect.Method method)
     public Method getMethod() {
         return method;
     }
+
+    public Object getInstance() {
+        return instance;
+    }
 }
