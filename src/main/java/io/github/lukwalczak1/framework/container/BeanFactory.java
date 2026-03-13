@@ -8,9 +8,12 @@ import io.github.lukwalczak1.framework.annotation.injection.Inject;
 import io.github.lukwalczak1.framework.annotation.PostConstruct;
 import io.github.lukwalczak1.framework.annotation.injection.NotNull;
 import io.github.lukwalczak1.framework.annotation.injection.Value;
+import io.github.lukwalczak1.framework.annotation.interceptor.InterceptedBy;
 import io.github.lukwalczak1.framework.annotation.interceptor.PostInvoke;
 import io.github.lukwalczak1.framework.annotation.interceptor.PreInvoke;
 import io.github.lukwalczak1.framework.exception.ValidationException;
+import io.github.lukwalczak1.framework.interceptor.MethodInterceptor;
+import io.github.lukwalczak1.framework.web.MethodInvocation;
 import net.bytebuddy.ByteBuddy;
 import net.bytebuddy.implementation.InvocationHandlerAdapter;
 import net.bytebuddy.matcher.ElementMatchers;
@@ -89,8 +92,7 @@ public class BeanFactory {
     }
     private Object wrapWithProxy(Object instance, Class<?> beanClass) {
         boolean hasInterceptor = Arrays.stream(beanClass.getDeclaredMethods()).anyMatch(
-                method -> method.isAnnotationPresent(PreInvoke.class) || method.isAnnotationPresent(PostInvoke.class)
-        );
+                method -> method.isAnnotationPresent(InterceptedBy.class));
 
         if (!hasInterceptor) {
             return instance;
@@ -102,27 +104,23 @@ public class BeanFactory {
                     .method(ElementMatchers.any())
                     .intercept(InvocationHandlerAdapter.of((proxy, method, args) -> {
                         Method originalMethod = beanClass.getMethod(method.getName(), method.getParameterTypes());
-
-                        if (originalMethod.isAnnotationPresent(PreInvoke.class)) {
-                            Class<?> interceptorClass = originalMethod.getAnnotation(PreInvoke.class).value();
-                            Object interceptorInstance = getOrCreateBean(interceptorClass);
-                            Method interceptorMethod = interceptorClass.getMethod("intercept", Object[].class);
-                            Object[] finalArgs = (args == null) ? new Object[0] : args;
-                            interceptorMethod.invoke(interceptorInstance, (Object) finalArgs);
+                        Set<MethodInterceptor> uniqueInterceptors = new HashSet<>();
+                        if (originalMethod.isAnnotationPresent(InterceptedBy.class)) {
+                            Class<? extends MethodInterceptor>[] interceptorClasses =
+                                    originalMethod.getAnnotation(InterceptedBy.class).value();
+                            for (Class<? extends MethodInterceptor> ic : interceptorClasses) {
+                                uniqueInterceptors.add(getOrCreateBean(ic));
+                            }
                         }
 
-                        originalMethod.setAccessible(true);
-                        Object result = originalMethod.invoke(instance, args);
+                        MethodInvocation finalInvocation = new MethodInvocation(instance, originalMethod);
+                        InvocationContext context = new InvocationContext(
+                                new ArrayList<>(uniqueInterceptors),
+                                args != null ? args : new Object[0],
+                                finalInvocation
+                        );
 
-                        if (originalMethod.isAnnotationPresent(PostInvoke.class)) {
-                            Class<?> interceptorClass = originalMethod.getAnnotation(PostInvoke.class).value();
-                            Object interceptorInstance = getOrCreateBean(interceptorClass);
-                            Method interceptorMethod = interceptorClass.getMethod("intercept", Object[].class);
-                            Object[] finalArgs = (args == null) ? new Object[0] : args;
-                            interceptorMethod.invoke(interceptorInstance, (Object) finalArgs);
-                        }
-
-                        return result;
+                        return context.proceed();
                     }))
                     .make()
                     .load(beanClass.getClassLoader())
@@ -135,11 +133,13 @@ public class BeanFactory {
     }
 
     private <T> T getOrCreateBean(Class<T> objectClass) {
+        // Check if bean already exists
         if (beans.containsKey(objectClass)) {
             return objectClass.cast(beans.get(objectClass));
         }
 
         Class<?> targetClass = objectClass;
+        // Finding implementation for interface
         if (objectClass.isInterface()) {
             targetClass = interfaceToImpl.get(objectClass);
             if (targetClass == null) {
@@ -147,6 +147,7 @@ public class BeanFactory {
             }
         }
 
+        // Constructor Injection
         try {
             Constructor<?>[] constructors = targetClass.getDeclaredConstructors();
             if (constructors.length == 0) {
@@ -168,6 +169,7 @@ public class BeanFactory {
             }
 
             Object instance = constructor.newInstance(parameters);
+
 
             // Field Injection
             populateClassFields(instance, targetClass);

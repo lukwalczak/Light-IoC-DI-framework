@@ -10,12 +10,10 @@ import io.github.lukwalczak1.framework.annotation.web.PathVariable;
 import io.github.lukwalczak1.framework.container.BeanFactory;
 import io.github.lukwalczak1.framework.annotation.web.RequestMapping;
 import io.github.lukwalczak1.framework.annotation.beans.Controller;
-import io.github.lukwalczak1.framework.interceptor.HandlerInterceptor;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -29,12 +27,8 @@ public class DispatcherHandler implements HttpHandler {
 
     private final BeanFactory beanFactory;
 
-    private final List<HandlerInterceptor> handlerInterceptors = new ArrayList<>();
-
     public DispatcherHandler(BeanFactory beanFactory) {
         this.beanFactory = beanFactory;
-        handlerInterceptors.addAll(beanFactory.getBeansOfType(HandlerInterceptor.class));
-        System.out.println("Initializing DispatcherHandler with BeanFactory: " + beanFactory);
         registerRoutes();
     }
 
@@ -98,6 +92,11 @@ public class DispatcherHandler implements HttpHandler {
             try {
                 Object[] args = determineInvocationArgs(invocation, exchange);
                 sendResponse(exchange, invocation.invoke(args));
+            }catch (InvocationTargetException e) {
+                // TO JEST KLUCZOWE: Wyciągnij prawdziwy błąd
+                Throwable realCause = e.getCause();
+                realCause.printStackTrace(); // Wypisz w konsoli!
+                sendResponse(exchange, 500, "Error: " + realCause.getMessage());
             } catch (Exception e) {
                 Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
                 Class<?> controllerClass = invocation.getInstance().getClass();
