@@ -104,7 +104,7 @@ public class BeanFactory {
                     .method(ElementMatchers.any())
                     .intercept(InvocationHandlerAdapter.of((proxy, method, args) -> {
                         Method originalMethod = beanClass.getMethod(method.getName(), method.getParameterTypes());
-                        Set<MethodInterceptor> uniqueInterceptors = new HashSet<>();
+                        Set<MethodInterceptor> uniqueInterceptors = new LinkedHashSet<>();
                         if (originalMethod.isAnnotationPresent(InterceptedBy.class)) {
                             Class<? extends MethodInterceptor>[] interceptorClasses =
                                     originalMethod.getAnnotation(InterceptedBy.class).value();
