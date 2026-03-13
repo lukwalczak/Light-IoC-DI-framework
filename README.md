@@ -108,9 +108,22 @@ The project is under active development.
 - [x] Interface-to-Implementation resolution.
 - [x] Dynamic Proxy mechanism for Interceptors.
 - [x] JSON Response/Request handling.
-- [ ] `@Value` annotation for external configuration (`.properties`).
+- [x] `@Value` annotation for external configuration (`.properties`).
+- [x] Exception Mapping (Global `@ExceptionHandler`).
+- [x] Interceptor chain execution (multiple interceptors on a single method).
+- [ ] Bean scopes
+- [ ] Circular dependency detection and resolution.
+- [ ] Java-based configuration
+- [ ] More complex Bean validation
+- [ ] Handling multipart/form-data requests.
+- [ ] Lazy initialization for beans
+- [ ] Bean profiling for performance monitoring.
+- [ ] Bean lifecycle callbacks (`@PostConstruct`, `@PreDestroy`).]
+- [ ] @RequestParam for query parameters.
+- [ ] Session management and cookie handling.
 - [ ] Static resource handling (serving HTML/CSS/JS).
-- [ ] Exception Mapping (Global `@ExceptionHandler`).
+- [ ] Unit Testing (JUnit 5) for core components.
+- [ ] Comprehensive documentation and usage examples.
 
 ---
 
