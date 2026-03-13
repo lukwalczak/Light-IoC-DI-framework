@@ -6,9 +6,11 @@ import java.lang.reflect.*;
 import io.github.classgraph.*;
 import io.github.lukwalczak1.framework.annotation.injection.Inject;
 import io.github.lukwalczak1.framework.annotation.PostConstruct;
+import io.github.lukwalczak1.framework.annotation.injection.NotNull;
 import io.github.lukwalczak1.framework.annotation.injection.Value;
 import io.github.lukwalczak1.framework.annotation.interceptor.PostInvoke;
 import io.github.lukwalczak1.framework.annotation.interceptor.PreInvoke;
+import io.github.lukwalczak1.framework.exception.ValidationException;
 import net.bytebuddy.ByteBuddy;
 import net.bytebuddy.implementation.InvocationHandlerAdapter;
 import net.bytebuddy.matcher.ElementMatchers;
@@ -169,6 +171,18 @@ public class BeanFactory {
 
             // Field Injection
             populateClassFields(instance, targetClass);
+
+
+            // Checking for @NotNull annotation
+            for(Field f : instance.getClass().getDeclaredFields()){
+                if(f.isAnnotationPresent(NotNull.class)){
+                    f.setAccessible(true);
+                    Object value = f.get(instance);
+                    if(value == null){
+                        throw new ValidationException("Field " + f.getName() + " in class " + instance.getClass().getName() + " is marked as @NotNull but was not injected.");
+                    }
+                }
+            }
 
             // PostConstruct
             for (Method m : targetClass.getDeclaredMethods()) {
