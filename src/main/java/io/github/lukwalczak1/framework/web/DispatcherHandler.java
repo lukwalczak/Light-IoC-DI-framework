@@ -104,6 +104,10 @@ public class DispatcherHandler implements HttpHandler {
                     controllerClass = controllerClass.getSuperclass();
                 }
                 handleException(exchange, controllerClass, cause);
+            }finally {
+
+                // Clear request-scoped beans after each request
+                beanFactory.getRequestScope().clear();
             }
         } else {
             sendResponse(exchange, 404, "Not Found");
