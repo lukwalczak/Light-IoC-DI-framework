@@ -38,7 +38,6 @@ public class DispatcherHandler implements HttpHandler {
 
     private void registerRoutes() {
         beanFactory.getBeanClasses().forEach(beanClass -> {
-            System.out.println("Sprawdzam adnotacje dla: " + beanClass.getName());
 
             if (beanClass.isAnnotationPresent(Controller.class)) {
                 String basePath = "";
