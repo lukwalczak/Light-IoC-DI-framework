@@ -13,6 +13,7 @@
     import io.github.lukwalczak1.framework.interceptor.MethodInterceptor;
     import io.github.lukwalczak1.framework.scope.annotation.RequestScoped;
     import io.github.lukwalczak1.framework.scope.implementation.RequestScope;
+    import io.github.lukwalczak1.framework.scope.interfaces.Scope;
     import io.github.lukwalczak1.framework.web.MethodInvocation;
     import net.bytebuddy.ByteBuddy;
     import net.bytebuddy.implementation.InvocationHandlerAdapter;
@@ -31,6 +32,8 @@
 
         private static String basePackage = "io.github.lukwalczak1";
 
+        private Set<Class<?>> beanClasses = new HashSet<>();
+
         public static BeanFactory getInstance() {
             if (instance == null) {
                 instance = new BeanFactory();
@@ -42,18 +45,12 @@
             scanForBeans();
         }
 
-
-        private void registerBean(Class<?> objectClass, Object instance) {
-            beans.put(objectClass, instance);
-            System.out.println("Registered bean: " + objectClass.getName());
-        }
-
         public Set<Class<?>> getRegisteredBeans() {
             return beans.keySet();
         }
 
         public <T> T getBean(Class<T> objectClass) {
-            return (T) beans.get(objectClass);
+            return getOrCreateBean(objectClass);
         }
 
         private void populateClassFields(Object object, Class<?> clazz){
@@ -134,78 +131,81 @@
             }
         }
 
+        @SuppressWarnings("unchecked")
         private <T> T getOrCreateBean(Class<T> objectClass) {
-            // Check if bean already exists
-            if (beans.containsKey(objectClass)) {
-                return objectClass.cast(beans.get(objectClass));
-            }
-
-            Class<?> targetClass = objectClass;
+            // Constructor Injection
+            Class<?> targetClass;
             // Finding implementation for interface
             if (objectClass.isInterface()) {
                 targetClass = interfaceToImpl.get(objectClass);
                 if (targetClass == null) {
                     throw new RuntimeException("No implementation found for interface: " + objectClass.getName());
                 }
+            } else {
+                targetClass = objectClass;
             }
 
-            // Constructor Injection
-            try {
-                Constructor<?>[] constructors = targetClass.getDeclaredConstructors();
-                if (constructors.length == 0) {
-                    throw new RuntimeException("No public constructor found for " + targetClass.getName());
-                }
-                Constructor<?> constructor = Arrays.stream(constructors)
-                        .filter(c -> c.isAnnotationPresent(Inject.class))
-                        .findFirst()
-                        .orElseGet(() -> Arrays.stream(constructors)
-                                .max(Comparator.comparingInt(c -> c.getParameterCount()))
-                                .get()
-                        );
-                constructor.setAccessible(true);
+            // Check if bean already exists
+            Scope beanScope = scopeRegistry.getBeanScope(targetClass);
 
-                Class<?>[] parameterTypes = constructor.getParameterTypes();
-                Object[] parameters = new Object[parameterTypes.length];
-                for (int i = 0; i < parameterTypes.length; i++) {
-                    parameters[i] = getOrCreateBean(parameterTypes[i]);
-                }
+            return (T) beanScope.get(objectClass, () -> {
+                try {
+                    Constructor<?>[] constructors = targetClass.getDeclaredConstructors();
+                    if (constructors.length == 0) {
+                        throw new RuntimeException("No public constructor found for " + targetClass.getName());
+                    }
+                    Constructor<?> constructor = Arrays.stream(constructors)
+                            .filter(c -> c.isAnnotationPresent(Inject.class))
+                            .findFirst()
+                            .orElseGet(() -> Arrays.stream(constructors)
+                                    .max(Comparator.comparingInt(c -> c.getParameterCount()))
+                                    .get()
+                            );
+                    constructor.setAccessible(true);
 
-                Object instance = constructor.newInstance(parameters);
+                    Class<?>[] parameterTypes = constructor.getParameterTypes();
+                    Object[] parameters = new Object[parameterTypes.length];
+                    for (int i = 0; i < parameterTypes.length; i++) {
+                        parameters[i] = getOrCreateBean(parameterTypes[i]);
+                    }
+
+                    Object instance = constructor.newInstance(parameters);
 
 
-                // Field Injection
-                populateClassFields(instance, targetClass);
+                    // Field Injection
+                    populateClassFields(instance, targetClass);
 
 
-                // Checking for @NotNull annotation
-                for(Field f : instance.getClass().getDeclaredFields()){
-                    if(f.isAnnotationPresent(NotNull.class)){
-                        f.setAccessible(true);
-                        Object value = f.get(instance);
-                        if(value == null){
-                            throw new ValidationException("Field " + f.getName() + " in class " + instance.getClass().getName() + " is marked as @NotNull but was not injected.");
+                    // Checking for @NotNull annotation
+                    for(Field f : instance.getClass().getDeclaredFields()){
+                        if(f.isAnnotationPresent(NotNull.class)){
+                            f.setAccessible(true);
+                            Object value = f.get(instance);
+                            if(value == null){
+                                throw new ValidationException("Field " + f.getName() + " in class " + instance.getClass().getName() + " is marked as @NotNull but was not injected.");
+                            }
                         }
                     }
-                }
 
-                // PostConstruct
-                for (Method m : targetClass.getDeclaredMethods()) {
-                    if (m.isAnnotationPresent(PostConstruct.class)) {
-                        m.setAccessible(true);
-                        m.invoke(instance);
+                    // PostConstruct
+                    for (Method m : targetClass.getDeclaredMethods()) {
+                        if (m.isAnnotationPresent(PostConstruct.class)) {
+                            m.setAccessible(true);
+                            m.invoke(instance);
+                        }
                     }
+
+
+                    // AOP Proxy
+                    Object proxyInstance = wrapWithProxy(instance, targetClass);
+
+                    // beans.put(objectClass, proxyInstance);
+                    return objectClass.cast(proxyInstance);
+
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to create bean: " + objectClass.getName(), e);
                 }
-
-
-                // AOP Proxy
-                Object proxyInstance = wrapWithProxy(instance, targetClass);
-
-                beans.put(objectClass, proxyInstance);
-                return objectClass.cast(proxyInstance);
-
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to create bean: " + objectClass.getName(), e);
-            }
+            });
         }
 
         private void scanForBeans() {
@@ -234,6 +234,7 @@
                     if (interfaces.length > 0) {
                         getOrCreateBean(interfaces[0]);
                     } else {
+                        beanClasses.add(clazz);
                         getOrCreateBean(clazz);
                     }
                 }
@@ -271,6 +272,10 @@
                 }
             }
             return result;
+        }
+
+        public Set<Class<?>> getBeanClasses() {
+            return beanClasses;
         }
 
     }

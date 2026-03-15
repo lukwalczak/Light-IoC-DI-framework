@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 public class DispatcherHandler implements HttpHandler {
 
-    private final Map<String, MethodInvocation> routes = new HashMap<>();
+    private final Map<String, RouteDefinition> routes = new HashMap<>();
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -32,33 +32,30 @@ public class DispatcherHandler implements HttpHandler {
         registerRoutes();
     }
 
-    private void registerRoute(String path, String method, MethodInvocation invocation) {
-        routes.put(method + ":" + path, invocation);
+    private void registerRoute(String path, String method, RouteDefinition routeDefinition) {
+        routes.put(method + ":" + path, routeDefinition);
     }
 
     private void registerRoutes() {
-        beanFactory.getRegisteredBeans().forEach(beanClass -> {
+        beanFactory.getBeanClasses().forEach(beanClass -> {
+            System.out.println("Sprawdzam adnotacje dla: " + beanClass.getName());
+
             if (beanClass.isAnnotationPresent(Controller.class)) {
-                Object beanInstance = beanFactory.getBean(beanClass);
-                Class<?> targetClass = beanClass.getName().contains("ByteBuddy")
-                        ? beanClass.getSuperclass()
-                        : beanClass;
                 String basePath = "";
-                if (targetClass.isAnnotationPresent(RequestMapping.class)) {
-                    basePath = targetClass.getAnnotation(RequestMapping.class).value();
+                if (beanClass.isAnnotationPresent(RequestMapping.class)) {
+                    basePath = beanClass.getAnnotation(RequestMapping.class).value();
                 }
 
-                for (Method method : targetClass.getDeclaredMethods()) {
+                for (Method method : beanClass.getDeclaredMethods()) {
                     if (method.isAnnotationPresent(RequestMapping.class)) {
                         RequestMapping reqMapping = method.getAnnotation(RequestMapping.class);
                         String fullPath = basePath + reqMapping.value();
-                        registerRoute(fullPath, reqMapping.method(), new MethodInvocation(beanInstance, method));
+                        registerRoute(fullPath, reqMapping.method(), new RouteDefinition(beanClass, method));
                     }
                 }
             }
         });
-    }
-    public Object[] determineInvocationArgs(MethodInvocation invocation, HttpExchange exchange) throws IOException {
+    }    public Object[] determineInvocationArgs(MethodInvocation invocation, HttpExchange exchange) throws IOException {
         Method method = invocation.getMethod();
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = new Object[paramTypes.length];
@@ -87,25 +84,27 @@ public class DispatcherHandler implements HttpHandler {
         // Handler interceptors logic
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
-        MethodInvocation invocation = routes.get(method + ":" + path);
-        if (invocation != null) {
+        RouteDefinition route = routes.get(method + ":" + path);
+        if (route != null) {
             try {
+                Object controllerInstance = beanFactory.getBean(route.controllerClass());
+
+                MethodInvocation invocation = new MethodInvocation(controllerInstance, route.method());
                 Object[] args = determineInvocationArgs(invocation, exchange);
+
                 sendResponse(exchange, invocation.invoke(args));
             }catch (InvocationTargetException e) {
-                // TO JEST KLUCZOWE: Wyciągnij prawdziwy błąd
                 Throwable realCause = e.getCause();
-                realCause.printStackTrace(); // Wypisz w konsoli!
+                realCause.printStackTrace();
                 sendResponse(exchange, 500, "Error: " + realCause.getMessage());
             } catch (Exception e) {
                 Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
-                Class<?> controllerClass = invocation.getInstance().getClass();
+                Class<?> controllerClass = route.controllerClass();
                 if (controllerClass.getName().contains("ByteBuddy")) {
                     controllerClass = controllerClass.getSuperclass();
                 }
                 handleException(exchange, controllerClass, cause);
             }finally {
-
                 // Clear request-scoped beans after each request
                 beanFactory.getRequestScope().clear();
             }

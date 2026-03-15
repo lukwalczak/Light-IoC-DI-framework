@@ -4,12 +4,23 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-public abstract class AbstractScope implements Scope{
+public abstract class AbstractScope implements Scope {
 
     protected Map<Class<?>, Object> instances = new ConcurrentHashMap<>();
 
     @Override
     public Object get(Class<?> beanClass, Supplier<Object> objectFactory) {
-        return instances.computeIfAbsent(beanClass, cls -> objectFactory.get());
+        Object instance = instances.get(beanClass);
+
+        if (instance == null) {
+            synchronized (this) {
+                instance = instances.get(beanClass);
+                if (instance == null) {
+                    instance = objectFactory.get();
+                    instances.put(beanClass, instance);
+                }
+            }
+        }
+        return instance;
     }
 }

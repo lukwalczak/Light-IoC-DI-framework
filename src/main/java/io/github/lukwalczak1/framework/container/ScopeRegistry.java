@@ -16,7 +16,7 @@ import java.util.Map;
 
 public class ScopeRegistry {
 
-    private Map<Class<? extends Annotation>, Scope> scopeMap = new HashMap<>();
+    private final Map<Class<? extends Annotation>, Scope> scopeMap = new HashMap<>();
 
     public ScopeRegistry() {
         scopeMap.put(ApplicationScoped.class, new ApplicationScope());
@@ -29,4 +29,12 @@ public class ScopeRegistry {
         return scopeMap.get(annotationClass);
     }
 
+    public <T> Scope getBeanScope(Class<T> objectClass) {
+        for (Map.Entry<Class<? extends Annotation>, Scope> entry : scopeMap.entrySet()) {
+            if (objectClass.isAnnotationPresent(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return scopeMap.get(ApplicationScoped.class);
+    }
 }
