@@ -38,23 +38,26 @@ public class DispatcherHandler implements HttpHandler {
 
     private void registerRoutes() {
         beanFactory.getBeanClasses().forEach(beanClass -> {
+            if (!beanClass.isAnnotationPresent(Controller.class)) {
+                return;
+            }
+            String basePath = "";
+            if (beanClass.isAnnotationPresent(RequestMapping.class)) {
+                basePath = beanClass.getAnnotation(RequestMapping.class).value();
+            }
 
-            if (beanClass.isAnnotationPresent(Controller.class)) {
-                String basePath = "";
-                if (beanClass.isAnnotationPresent(RequestMapping.class)) {
-                    basePath = beanClass.getAnnotation(RequestMapping.class).value();
-                }
-
-                for (Method method : beanClass.getDeclaredMethods()) {
-                    if (method.isAnnotationPresent(RequestMapping.class)) {
-                        RequestMapping reqMapping = method.getAnnotation(RequestMapping.class);
-                        String fullPath = basePath + reqMapping.value();
-                        registerRoute(fullPath, reqMapping.method(), new RouteDefinition(beanClass, method));
-                    }
+            for (Method method : beanClass.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(RequestMapping.class)) {
+                    RequestMapping reqMapping = method.getAnnotation(RequestMapping.class);
+                    String fullPath = basePath + reqMapping.value();
+                    registerRoute(fullPath, reqMapping.method(), new RouteDefinition(beanClass, method));
                 }
             }
+
         });
-    }    public Object[] determineInvocationArgs(MethodInvocation invocation, HttpExchange exchange) throws IOException {
+    }
+
+    public Object[] determineInvocationArgs(MethodInvocation invocation, HttpExchange exchange) throws IOException {
         Method method = invocation.getMethod();
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = new Object[paramTypes.length];
@@ -119,12 +122,27 @@ public class DispatcherHandler implements HttpHandler {
     }
 
     private void handleException(HttpExchange exchange, Class<?> controllerClass, Throwable exception) throws IOException {
-        //Unwrap exception to find the root
+        // Unwrap exception to find the root
         while(exception instanceof InvocationTargetException && exception.getCause() != null){
             exception = exception.getCause();
         }
 
         // Implementation in controller has priority over global handlers
+        if(controllerExceptionHandler(controllerClass, exception, exchange)){
+            return;
+        }
+
+        // If controller didn't handle the exception, we look for global handlers in @ControllerAdvice classes
+        List<Class<?>> controllerAdviceClasses = getBeanClassesWithAnnotation(ControllerAdvice.class);
+        if(globalExceptionHandler(controllerAdviceClasses, exception, exchange)){
+            return;
+        }
+
+        //Unhandled exception, return generic error response
+        sendResponse(exchange, 500, "Internal Server Error");
+    }
+
+    private boolean controllerExceptionHandler(Class<?> controllerClass, Throwable exception, HttpExchange exchange) throws IOException {
         for( Method method : controllerClass.getDeclaredMethods()){
             if(method.isAnnotationPresent(ExceptionHandler.class)){
                 Class<? extends Throwable> handledException = method.getAnnotation(ExceptionHandler.class).value();
@@ -135,19 +153,22 @@ public class DispatcherHandler implements HttpHandler {
                         Object result = method.invoke(handlerInstance, exception);
                         if(result != null){
                             sendResponse(exchange, result);
-                            return;
+                            return true;
                         }
                     }catch (Exception e){
                         System.out.println("Error invoking exception handler: " + e);
                         sendResponse(exchange, 500, "Internal Server Error");
-                        return;
+                        return true;
                     }
                 }
 
             }
         }
-        List<Class<?>> controllerAdviceClasses = getBeanClassesWithAnnotation(ControllerAdvice.class);
-        // global exception handlers
+        return false;
+    }
+
+    //Returns true if exception was handled and response was sent, false otherwise
+    private boolean globalExceptionHandler(List<Class<?>> controllerAdviceClasses, Throwable exception, HttpExchange exchange) throws IOException {
         for(Class<?> advice : controllerAdviceClasses){
             for(Method method : advice.getDeclaredMethods()){
                 if(method.isAnnotationPresent(ExceptionHandler.class)){
@@ -158,20 +179,19 @@ public class DispatcherHandler implements HttpHandler {
                             Object result = method.invoke(instance, exception);
                             if(result != null){
                                 sendResponse(exchange, result);
-                                return;
+                                return true;
                             }
                         }catch (Exception e){
+                            // If exception handler itself throws an exception, we log it and return generic error response
                             sendResponse(exchange, 500, "Internal Server Error");
-                            return;
+                            System.out.println("Error invoking global exception handler: " + e);
+                            return true;
                         }
                     }
                 }
             }
         }
-
-
-        //Unhandled exception, return generic error response
-        sendResponse(exchange, 500, "Internal Server Error");
+        return false;
     }
 
     private void sendResponse(HttpExchange exchange, Object invocationResult) throws IOException {
