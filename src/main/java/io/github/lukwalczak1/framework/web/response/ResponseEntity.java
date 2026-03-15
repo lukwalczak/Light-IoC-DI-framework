@@ -1,4 +1,4 @@
-package io.github.lukwalczak1.framework.web;
+package io.github.lukwalczak1.framework.web.response;
 
 public class ResponseEntity<T> {
     private final T body;

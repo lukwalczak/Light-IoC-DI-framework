@@ -10,6 +10,8 @@ import io.github.lukwalczak1.framework.annotation.web.PathVariable;
 import io.github.lukwalczak1.framework.container.BeanFactory;
 import io.github.lukwalczak1.framework.annotation.web.RequestMapping;
 import io.github.lukwalczak1.framework.annotation.beans.Controller;
+import io.github.lukwalczak1.framework.web.response.ResponseCodes;
+import io.github.lukwalczak1.framework.web.response.ResponseEntity;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -18,6 +20,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static io.github.lukwalczak1.framework.web.response.ResponseCodes.INTERNAL_SERVER_ERROR;
+import static io.github.lukwalczak1.framework.web.response.ResponseCodes.NOT_FOUND;
 
 public class DispatcherHandler implements HttpHandler {
 
@@ -87,31 +92,31 @@ public class DispatcherHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
         RouteDefinition route = routes.get(method + ":" + path);
-        if (route != null) {
-            try {
-                Object controllerInstance = beanFactory.getBean(route.controllerClass());
+        if (route == null) {
+            sendResponse(exchange, NOT_FOUND);
+            return;
+        }
+        try {
+            Object controllerInstance = beanFactory.getBean(route.controllerClass());
 
-                MethodInvocation invocation = new MethodInvocation(controllerInstance, route.method());
-                Object[] args = determineInvocationArgs(invocation, exchange);
+            MethodInvocation invocation = new MethodInvocation(controllerInstance, route.method());
+            Object[] args = determineInvocationArgs(invocation, exchange);
 
-                sendResponse(exchange, invocation.invoke(args));
-            }catch (InvocationTargetException e) {
-                Throwable realCause = e.getCause();
-                realCause.printStackTrace();
-                sendResponse(exchange, 500, "Error: " + realCause.getMessage());
-            } catch (Exception e) {
-                Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
-                Class<?> controllerClass = route.controllerClass();
-                if (controllerClass.getName().contains("ByteBuddy")) {
-                    controllerClass = controllerClass.getSuperclass();
-                }
-                handleException(exchange, controllerClass, cause);
-            }finally {
-                // Clear request-scoped beans after each request
-                beanFactory.getRequestScope().clear();
+            sendResponse(exchange, invocation.invoke(args));
+        }catch (InvocationTargetException e) {
+            Throwable realCause = e.getCause();
+            realCause.printStackTrace();
+            sendResponse(exchange, 500);
+        } catch (Exception e) {
+            Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
+            Class<?> controllerClass = route.controllerClass();
+            if (controllerClass.getName().contains("ByteBuddy")) {
+                controllerClass = controllerClass.getSuperclass();
             }
-        } else {
-            sendResponse(exchange, 404, "Not Found");
+            handleException(exchange, controllerClass, cause);
+        }finally {
+            // Clear request-scoped beans after each request
+            beanFactory.getRequestScope().clear();
         }
         exchange.close();
     }
@@ -139,7 +144,7 @@ public class DispatcherHandler implements HttpHandler {
         }
 
         //Unhandled exception, return generic error response
-        sendResponse(exchange, 500, "Internal Server Error");
+        sendResponse(exchange, INTERNAL_SERVER_ERROR);
     }
 
     private boolean controllerExceptionHandler(Class<?> controllerClass, Throwable exception, HttpExchange exchange) throws IOException {
@@ -157,7 +162,7 @@ public class DispatcherHandler implements HttpHandler {
                         }
                     }catch (Exception e){
                         System.out.println("Error invoking exception handler: " + e);
-                        sendResponse(exchange, 500, "Internal Server Error");
+                        sendResponse(exchange, INTERNAL_SERVER_ERROR);
                         return true;
                     }
                 }
@@ -183,7 +188,7 @@ public class DispatcherHandler implements HttpHandler {
                             }
                         }catch (Exception e){
                             // If exception handler itself throws an exception, we log it and return generic error response
-                            sendResponse(exchange, 500, "Internal Server Error");
+                            sendResponse(exchange, INTERNAL_SERVER_ERROR);
                             System.out.println("Error invoking global exception handler: " + e);
                             return true;
                         }
@@ -203,6 +208,11 @@ public class DispatcherHandler implements HttpHandler {
             exchange.sendResponseHeaders(200, objectMapper.writeValueAsBytes(invocationResult).length);
             exchange.getResponseBody().write(objectMapper.writeValueAsBytes(invocationResult));
         }
+    }
+
+    private void sendResponse(HttpExchange exchange, ResponseCodes response) throws IOException {
+        exchange.sendResponseHeaders(response.getCode(), response.getDescription().getBytes().length);
+        exchange.getResponseBody().write(response.getDescription().getBytes());
     }
 
     private void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
