@@ -49,17 +49,13 @@
             return beans.keySet();
         }
 
-        public <T> T getBean(Class<T> objectClass) {
-            return getOrCreateBean(objectClass);
-        }
-
         private void populateClassFields(Object object, Class<?> clazz){
             Class<?> currentClass = clazz;
             // Unwrapping proxy to get original class for field injection
             while (currentClass != null && currentClass != Object.class) {
                 for(Field field : currentClass.getDeclaredFields()){
                     if(field.isAnnotationPresent(Inject.class)){
-                        Object dependency = getOrCreateBean(field.getType());
+                        Object dependency = getBean(field.getType());
                         injectValue(field, object, dependency);
                     } else if (field.isAnnotationPresent(Value.class)) {
                         String key = field.getAnnotation(Value.class).value();
@@ -109,7 +105,7 @@
                                 Class<? extends MethodInterceptor>[] interceptorClasses =
                                         originalMethod.getAnnotation(InterceptedBy.class).value();
                                 for (Class<? extends MethodInterceptor> ic : interceptorClasses) {
-                                    uniqueInterceptors.add(getOrCreateBean(ic));
+                                    uniqueInterceptors.add(getBean(ic));
                                 }
                             }
 
@@ -133,80 +129,95 @@
         }
 
         @SuppressWarnings("unchecked")
-        private <T> T getOrCreateBean(Class<T> objectClass) {
-            // Constructor Injection
-            Class<?> targetClass;
-            // Finding implementation for interface
+        public <T> T getBean(Class<T> objectClass) {
+            Object bean = beans.get(objectClass);
+            if (bean != null) {
+                return objectClass.cast(bean);
+            }
+
+            Class<?> targetClass = resolveTargetClass(objectClass);
+            Scope beanScope = scopeRegistry.getBeanScope(targetClass);
+
+            return (T) beanScope.get(objectClass, () -> objectClass.cast(createBean(targetClass)));
+        }
+
+        private Object createBean(Class<?> targetClass) {
+            try {
+                // Constructor Injection
+                Object instance = instantiateBean(targetClass);
+
+                // Field Injection
+                populateClassFields(instance, targetClass);
+
+                // Validation of @NotNull fields
+                validateNotNullFields(instance);
+
+                // PostConstruct initialization
+                invokePostConstruct(instance, targetClass);
+
+                // 5. AOP Proxy
+                return wrapWithProxy(instance, targetClass);
+
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create bean: " + targetClass.getName(), e);
+            }
+        }
+
+        private Class<?> resolveTargetClass(Class<?> objectClass) {
             if (objectClass.isInterface()) {
-                targetClass = interfaceToImpl.get(objectClass);
+                Class<?> targetClass = interfaceToImpl.get(objectClass);
                 if (targetClass == null) {
                     throw new RuntimeException("No implementation found for interface: " + objectClass.getName());
                 }
-            } else {
-                targetClass = objectClass;
+                return targetClass;
+            }
+            return objectClass;
+        }
+
+        private Object instantiateBean(Class<?> targetClass) throws Exception {
+            Constructor<?>[] constructors = targetClass.getDeclaredConstructors();
+            if (constructors.length == 0) {
+                throw new RuntimeException("No public constructor found for " + targetClass.getName());
             }
 
-            // Check if bean already exists
-            Scope beanScope = scopeRegistry.getBeanScope(targetClass);
+            Constructor<?> constructor = Arrays.stream(constructors)
+                    .filter(c -> c.isAnnotationPresent(Inject.class))
+                    .findFirst()
+                    .orElseGet(() -> Arrays.stream(constructors)
+                            .max(Comparator.comparingInt(Constructor::getParameterCount))
+                            .get()
+                    );
+            constructor.setAccessible(true);
 
-            return (T) beanScope.get(objectClass, () -> {
-                try {
-                    Constructor<?>[] constructors = targetClass.getDeclaredConstructors();
-                    if (constructors.length == 0) {
-                        throw new RuntimeException("No public constructor found for " + targetClass.getName());
+            Class<?>[] parameterTypes = constructor.getParameterTypes();
+            Object[] parameters = new Object[parameterTypes.length];
+            for (int i = 0; i < parameterTypes.length; i++) {
+                parameters[i] = getBean(parameterTypes[i]);
+            }
+
+            return constructor.newInstance(parameters);
+        }
+
+        private void validateNotNullFields(Object instance) throws Exception {
+            for (Field f : instance.getClass().getDeclaredFields()) {
+                if (f.isAnnotationPresent(NotNull.class)) {
+                    f.setAccessible(true);
+                    Object value = f.get(instance);
+                    if (value == null) {
+                        throw new ValidationException("Field " + f.getName() + " in class " +
+                                instance.getClass().getName() + " is marked as @NotNull but was not injected.");
                     }
-                    Constructor<?> constructor = Arrays.stream(constructors)
-                            .filter(c -> c.isAnnotationPresent(Inject.class))
-                            .findFirst()
-                            .orElseGet(() -> Arrays.stream(constructors)
-                                    .max(Comparator.comparingInt(c -> c.getParameterCount()))
-                                    .get()
-                            );
-                    constructor.setAccessible(true);
-
-                    Class<?>[] parameterTypes = constructor.getParameterTypes();
-                    Object[] parameters = new Object[parameterTypes.length];
-                    for (int i = 0; i < parameterTypes.length; i++) {
-                        parameters[i] = getOrCreateBean(parameterTypes[i]);
-                    }
-
-                    Object instance = constructor.newInstance(parameters);
-
-
-                    // Field Injection
-                    populateClassFields(instance, targetClass);
-
-
-                    // Checking for @NotNull annotation
-                    for(Field f : instance.getClass().getDeclaredFields()){
-                        if(f.isAnnotationPresent(NotNull.class)){
-                            f.setAccessible(true);
-                            Object value = f.get(instance);
-                            if(value == null){
-                                throw new ValidationException("Field " + f.getName() + " in class " + instance.getClass().getName() + " is marked as @NotNull but was not injected.");
-                            }
-                        }
-                    }
-
-                    // PostConstruct
-                    for (Method m : targetClass.getDeclaredMethods()) {
-                        if (m.isAnnotationPresent(PostConstruct.class)) {
-                            m.setAccessible(true);
-                            m.invoke(instance);
-                        }
-                    }
-
-
-                    // AOP Proxy
-                    Object proxyInstance = wrapWithProxy(instance, targetClass);
-
-                    // beans.put(objectClass, proxyInstance);
-                    return objectClass.cast(proxyInstance);
-
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to create bean: " + objectClass.getName(), e);
                 }
-            });
+            }
+        }
+
+        private void invokePostConstruct(Object instance, Class<?> targetClass) throws Exception {
+            for (Method m : targetClass.getDeclaredMethods()) {
+                if (m.isAnnotationPresent(PostConstruct.class)) {
+                    m.setAccessible(true);
+                    m.invoke(instance);
+                }
+            }
         }
 
         private void scanForBeans() {
@@ -233,10 +244,10 @@
                 for (Class<?> clazz : annotatedClasses) {
                     Class<?>[] interfaces = clazz.getInterfaces();
                     if (interfaces.length > 0) {
-                        getOrCreateBean(interfaces[0]);
+                        getBean(interfaces[0]);
                     } else {
                         beanClasses.add(clazz);
-                        getOrCreateBean(clazz);
+                        getBean(clazz);
                     }
                 }
             }
