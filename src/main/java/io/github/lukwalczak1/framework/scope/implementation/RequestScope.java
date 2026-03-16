@@ -6,6 +6,10 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.function.Supplier;
 
+/**
+ * Request Scope implementation that manages beans within lifecycle of a single request
+ * Each HTTP request will have its own instance of RequestScope bean
+ */
 public class RequestScope extends AbstractScope {
 
     private final ThreadLocal<Map<Class<?>, Object>> requestBeans = ThreadLocal.withInitial(HashMap::new);

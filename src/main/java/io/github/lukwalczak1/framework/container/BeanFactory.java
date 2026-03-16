@@ -55,6 +55,7 @@
 
         private void populateClassFields(Object object, Class<?> clazz){
             Class<?> currentClass = clazz;
+            // Unwrapping proxy to get original class for field injection
             while (currentClass != null && currentClass != Object.class) {
                 for(Field field : currentClass.getDeclaredFields()){
                     if(field.isAnnotationPresent(Inject.class)){
