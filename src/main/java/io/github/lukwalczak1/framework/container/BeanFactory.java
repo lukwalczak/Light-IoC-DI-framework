@@ -12,6 +12,7 @@
     import io.github.lukwalczak1.framework.exception.ValidationException;
     import io.github.lukwalczak1.framework.interceptor.MethodInterceptor;
     import io.github.lukwalczak1.framework.scope.annotation.RequestScoped;
+    import io.github.lukwalczak1.framework.scope.implementation.ApplicationScope;
     import io.github.lukwalczak1.framework.scope.implementation.RequestScope;
     import io.github.lukwalczak1.framework.scope.interfaces.Scope;
     import io.github.lukwalczak1.framework.web.MethodInvocation;
@@ -42,7 +43,11 @@
         }
 
         public void initContext(String basePackage) {
-            scanForBeans();
+            Set<Class<?>> candidateClasses = discoverCandidateClasses(basePackage);
+
+            registerBeanDefinitions(candidateClasses);
+
+            preInstantiateSingletons();
         }
 
         public Set<Class<?>> getRegisteredBeans() {
@@ -220,35 +225,40 @@
             }
         }
 
-        private void scanForBeans() {
+        private Set<Class<?>> discoverCandidateClasses(String targetPackage) {
             List<String> annotationNames = scanForAvailableAnnotations();
             System.out.println("Found annotations: " + annotationNames);
+            Set<Class<?>> annotatedClasses = new HashSet<>();
             try (ScanResult scanResult = new ClassGraph()
-                    .acceptPackages(basePackage)
+                    .acceptPackages(targetPackage)
                     .enableClassInfo()
                     .enableAnnotationInfo()
                     .scan()) {
-                Set<Class<?>> annotatedClasses = new HashSet<>();
-                annotationNames.forEach( annotationName -> {
-                   scanResult.getAllClasses()
-                           .filter(classInfo -> classInfo.hasAnnotation(annotationName))
-                           .forEach(classInfo -> {
-                               annotatedClasses.add(classInfo.loadClass());
-                           });
+
+                annotationNames.forEach(annotationName -> {
+                    scanResult.getAllClasses()
+                            .filter(classInfo -> classInfo.hasAnnotation(annotationName))
+                            .forEach(classInfo -> annotatedClasses.add(classInfo.loadClass()));
                 });
-                for(Class<?> clazz : annotatedClasses) {
-                    for(Class<?> iface : clazz.getInterfaces()){
-                        interfaceToImpl.put(iface, clazz);
-                    }
+            }
+            return annotatedClasses;
+        }
+
+        private void registerBeanDefinitions(Set<Class<?>> candidateClasses) {
+            for (Class<?> clazz : candidateClasses) {
+                beanClasses.add(clazz);
+                for (Class<?> iface : clazz.getInterfaces()) {
+                    interfaceToImpl.put(iface, clazz);
                 }
-                for (Class<?> clazz : annotatedClasses) {
-                    Class<?>[] interfaces = clazz.getInterfaces();
-                    if (interfaces.length > 0) {
-                        getBean(interfaces[0]);
-                    } else {
-                        beanClasses.add(clazz);
-                        getBean(clazz);
-                    }
+            }
+        }
+
+        private void preInstantiateSingletons() {
+            for (Class<?> clazz : beanClasses) {
+                Scope scope = scopeRegistry.getBeanScope(clazz);
+                if (scope.getClass().equals(ApplicationScope.class)) {
+                    System.out.println("Pre-instantiating singleton: " + clazz.getName());
+                    getBean(clazz);
                 }
             }
         }
