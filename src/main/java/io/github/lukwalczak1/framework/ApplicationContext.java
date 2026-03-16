@@ -28,7 +28,7 @@ public class ApplicationContext {
         beanFactory = BeanFactory.getInstance();
         beanFactory.initContext(basePackage);
         dispatcherHandler = new DispatcherHandler(beanFactory);
-        HttpServerManager serverManager = new HttpServerManager(8080, dispatcherHandler);
+        HttpServerManager serverManager = new HttpServerManager(port, dispatcherHandler);
         serverManager.startHttpServer(dispatcherHandler);
     }
 
