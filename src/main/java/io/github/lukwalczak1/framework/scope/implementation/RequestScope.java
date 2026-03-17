@@ -24,13 +24,14 @@ public class RequestScope extends AbstractScope {
             return existing;
         }
         Object newInstance = objectFactory.get();
+        invokePostConstructMethods(beanClass, newInstance);
         map.put(beanClass, newInstance);
 
         return newInstance;
     }
 
     @Override
-    protected void InvokePreDestroyMethods() {
+    protected void invokePreDestroyMethods() {
         requestBeans.get().values().forEach(instance -> {
             try {
                 Method[] methods = instance.getClass().getMethods();
@@ -46,7 +47,7 @@ public class RequestScope extends AbstractScope {
     }
 
     public void clear() {
-        InvokePreDestroyMethods();
+        invokePreDestroyMethods();
         requestBeans.get().clear();
     }
 

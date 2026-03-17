@@ -1,5 +1,6 @@
 package io.github.lukwalczak1.framework.scope.interfaces;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
@@ -17,6 +18,7 @@ public abstract class AbstractScope implements Scope {
                 instance = instances.get(beanClass);
                 if (instance == null) {
                     instance = objectFactory.get();
+                    invokePostConstructMethods(beanClass, instance);
                     instances.put(beanClass, instance);
                 }
             }
@@ -24,13 +26,36 @@ public abstract class AbstractScope implements Scope {
         return instance;
     }
 
-    protected void InvokePreDestroyMethods(){
+    protected void invokePostConstructMethods(Class<?> beanClass, Object instance) {
+        Method[] methods = beanClass.getMethods();
+        for (Method method : methods) {
+            if (method.isAnnotationPresent(io.github.lukwalczak1.framework.annotation.interceptor.PostConstruct.class)) {
+                try {
+                    method.invoke(instance);
+                } catch (Exception e) {
+                    // No postConstruct method or error invoking it, ignore
+                }
+            }
+        }
+    }
+
+    protected void invokePreDestroyMethods(){
         instances.values().forEach(instance -> {
             try {
-                instance.getClass().getMethod("preDestroy").invoke(instance);
+                Method[] methods = instance.getClass().getMethods();
+                for (Method method : methods) {
+                    if (method.isAnnotationPresent(io.github.lukwalczak1.framework.annotation.interceptor.PreDestroy.class)) {
+                        method.invoke(instance);
+                    }
+                }
             } catch (Exception e) {
                 // No preDestroy method or error invoking it, ignore
             }
         });
+    }
+
+    public void clear() {
+        invokePreDestroyMethods();
+        instances.clear();
     }
 }
