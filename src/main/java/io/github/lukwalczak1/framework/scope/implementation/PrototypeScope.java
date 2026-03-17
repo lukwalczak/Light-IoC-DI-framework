@@ -10,6 +10,8 @@ import java.util.function.Supplier;
 public class PrototypeScope extends AbstractScope {
         @Override
         public Object get(Class<?> beanClass, Supplier<Object> objectFactory) {
-            return objectFactory.get();
+            Object instance = objectFactory.get();
+            invokePostConstructMethods(beanClass, instance);
+            return instance;
         }
 }
