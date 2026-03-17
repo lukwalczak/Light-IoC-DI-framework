@@ -46,6 +46,11 @@ public class RequestScope extends AbstractScope {
         });
     }
 
+    @Override
+    public Object getIfPresent(Class<?> beanClass) {
+        return requestBeans.get().get(beanClass);
+    }
+
     public void clear() {
         invokePreDestroyMethods();
         requestBeans.get().clear();

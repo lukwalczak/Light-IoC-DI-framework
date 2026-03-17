@@ -4,6 +4,7 @@
     import java.lang.reflect.*;
 
     import io.github.classgraph.*;
+    import io.github.lukwalczak1.framework.annotation.Lazy;
     import io.github.lukwalczak1.framework.annotation.injection.Inject;
     import io.github.lukwalczak1.framework.annotation.PostConstruct;
     import io.github.lukwalczak1.framework.annotation.injection.NotNull;
@@ -133,15 +134,36 @@
             }
         }
 
+        private Object wrapWithLazyProxy(Class<?> targetClass){
+            try{
+                System.out.println("Creating lazy proxy for " + targetClass.getName());
+                return new ByteBuddy()
+                        .subclass(targetClass)
+                        .method(ElementMatchers.any())
+                        .intercept(InvocationHandlerAdapter.of(new LazyInterceptor(this, targetClass)))
+                        .make()
+                        .load(targetClass.getClassLoader())
+                        .getLoaded()
+                        .getDeclaredConstructor()
+                        .newInstance();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create lazy proxy for " + targetClass.getName(), e);
+            }
+        }
+
         @SuppressWarnings("unchecked")
         public <T> T getBean(Class<T> objectClass) {
-            Object bean = beans.get(objectClass);
-            if (bean != null) {
-                return objectClass.cast(bean);
-            }
-
             Class<?> targetClass = resolveTargetClass(objectClass);
             Scope beanScope = scopeRegistry.getBeanScope(targetClass);
+            Object existing = beanScope.getIfPresent(targetClass);
+            if (existing != null) {
+                return (T) existing;
+            }
+
+            if(targetClass.isAnnotationPresent(Lazy.class) && !beans.containsKey(targetClass)) {
+                System.out.println("Creating lazy proxy for " + targetClass.getName());
+                return (T) wrapWithLazyProxy(targetClass);
+            }
 
             return (T) beanScope.get(objectClass, () -> objectClass.cast(createBean(targetClass)));
         }
@@ -197,6 +219,7 @@
             Class<?>[] parameterTypes = constructor.getParameterTypes();
             Object[] parameters = new Object[parameterTypes.length];
             for (int i = 0; i < parameterTypes.length; i++) {
+                System.out.println("Resolving constructor parameter: " + parameterTypes[i].getName() + " for " + targetClass.getName());
                 parameters[i] = getBean(parameterTypes[i]);
             }
 
@@ -298,6 +321,14 @@
 
         public Set<Class<?>> getBeanClasses() {
             return beanClasses;
+        }
+
+        public Object materializeBean(Class<?> targetClass) {
+            Object existing = beans.get(targetClass);
+            if (existing != null) return existing;
+
+            Scope beanScope = scopeRegistry.getBeanScope(targetClass);
+            return beanScope.get(targetClass, () -> createBean(targetClass));
         }
 
     }

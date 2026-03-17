@@ -26,6 +26,11 @@ public abstract class AbstractScope implements Scope {
         return instance;
     }
 
+    @Override
+    public Object getIfPresent(Class<?> beanClass) {
+        return instances.get(beanClass);
+    }
+
     protected void invokePostConstructMethods(Class<?> beanClass, Object instance) {
         Method[] methods = beanClass.getMethods();
         for (Method method : methods) {
