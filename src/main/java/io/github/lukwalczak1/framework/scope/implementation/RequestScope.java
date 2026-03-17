@@ -1,7 +1,9 @@
 package io.github.lukwalczak1.framework.scope.implementation;
 
+import io.github.lukwalczak1.framework.annotation.interceptor.PreDestroy;
 import io.github.lukwalczak1.framework.scope.interfaces.AbstractScope;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.function.Supplier;
@@ -27,7 +29,24 @@ public class RequestScope extends AbstractScope {
         return newInstance;
     }
 
+    @Override
+    protected void InvokePreDestroyMethods() {
+        requestBeans.get().values().forEach(instance -> {
+            try {
+                Method[] methods = instance.getClass().getMethods();
+                for (Method method : methods) {
+                    if (method.isAnnotationPresent(PreDestroy.class)) {
+                        method.invoke(instance);
+                    }
+                }
+            } catch (Exception e) {
+                // No preDestroy method or error invoking it, ignore
+            }
+        });
+    }
+
     public void clear() {
+        InvokePreDestroyMethods();
         requestBeans.get().clear();
     }
 

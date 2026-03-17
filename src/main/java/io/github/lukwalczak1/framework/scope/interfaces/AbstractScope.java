@@ -23,4 +23,14 @@ public abstract class AbstractScope implements Scope {
         }
         return instance;
     }
+
+    protected void InvokePreDestroyMethods(){
+        instances.values().forEach(instance -> {
+            try {
+                instance.getClass().getMethod("preDestroy").invoke(instance);
+            } catch (Exception e) {
+                // No preDestroy method or error invoking it, ignore
+            }
+        });
+    }
 }

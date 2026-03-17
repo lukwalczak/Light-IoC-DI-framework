@@ -7,5 +7,4 @@ import java.lang.annotation.Target;
 @Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
 @Target({java.lang.annotation.ElementType.METHOD, ElementType.CONSTRUCTOR})
 public @interface PreDestroy {
-    Class<?> value();
 }
