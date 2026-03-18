@@ -219,7 +219,6 @@
             Class<?>[] parameterTypes = constructor.getParameterTypes();
             Object[] parameters = new Object[parameterTypes.length];
             for (int i = 0; i < parameterTypes.length; i++) {
-                System.out.println("Resolving constructor parameter: " + parameterTypes[i].getName() + " for " + targetClass.getName());
                 parameters[i] = getBean(parameterTypes[i]);
             }
 
