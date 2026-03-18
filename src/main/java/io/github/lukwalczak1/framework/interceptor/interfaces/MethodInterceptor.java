@@ -1,4 +1,4 @@
-package io.github.lukwalczak1.framework.interceptor;
+package io.github.lukwalczak1.framework.interceptor.interfaces;
 
 import io.github.lukwalczak1.framework.container.InvocationContext;
 

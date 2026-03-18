@@ -1,10 +1,9 @@
-package io.github.lukwalczak1.framework.annotation.beans;
+package io.github.lukwalczak1.framework.container.annotations.beans;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
 @Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
 @Target(java.lang.annotation.ElementType.TYPE)
-public @interface Controller {
-    String value() default  "";
+public @interface Service {
 }

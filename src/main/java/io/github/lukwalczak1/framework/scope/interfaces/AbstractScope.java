@@ -1,5 +1,8 @@
 package io.github.lukwalczak1.framework.scope.interfaces;
 
+import io.github.lukwalczak1.framework.interceptor.annotation.PostConstruct;
+import io.github.lukwalczak1.framework.interceptor.annotation.PreDestroy;
+
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,7 +37,7 @@ public abstract class AbstractScope implements Scope {
     protected void invokePostConstructMethods(Class<?> beanClass, Object instance) {
         Method[] methods = beanClass.getMethods();
         for (Method method : methods) {
-            if (method.isAnnotationPresent(io.github.lukwalczak1.framework.annotation.interceptor.PostConstruct.class)) {
+            if (method.isAnnotationPresent(PostConstruct.class)) {
                 try {
                     method.invoke(instance);
                 } catch (Exception e) {
@@ -49,7 +52,7 @@ public abstract class AbstractScope implements Scope {
             try {
                 Method[] methods = instance.getClass().getMethods();
                 for (Method method : methods) {
-                    if (method.isAnnotationPresent(io.github.lukwalczak1.framework.annotation.interceptor.PreDestroy.class)) {
+                    if (method.isAnnotationPresent(PreDestroy.class)) {
                         method.invoke(instance);
                     }
                 }

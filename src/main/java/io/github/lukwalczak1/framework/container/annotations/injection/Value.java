@@ -1,4 +1,4 @@
-package io.github.lukwalczak1.framework.annotation.injection;
+package io.github.lukwalczak1.framework.container.annotations.injection;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;

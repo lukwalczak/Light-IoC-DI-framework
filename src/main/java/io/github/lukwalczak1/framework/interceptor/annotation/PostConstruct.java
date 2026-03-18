@@ -1,4 +1,4 @@
-package io.github.lukwalczak1.framework.annotation;
+package io.github.lukwalczak1.framework.interceptor.annotation;
 
 
 import java.lang.annotation.Retention;

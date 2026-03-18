@@ -4,14 +4,14 @@
     import java.lang.reflect.*;
 
     import io.github.classgraph.*;
-    import io.github.lukwalczak1.framework.annotation.Lazy;
-    import io.github.lukwalczak1.framework.annotation.injection.Inject;
-    import io.github.lukwalczak1.framework.annotation.PostConstruct;
-    import io.github.lukwalczak1.framework.annotation.injection.NotNull;
-    import io.github.lukwalczak1.framework.annotation.injection.Value;
-    import io.github.lukwalczak1.framework.annotation.interceptor.InterceptedBy;
+    import io.github.lukwalczak1.framework.scope.annotation.Lazy;
+    import io.github.lukwalczak1.framework.container.annotations.injection.Inject;
+    import io.github.lukwalczak1.framework.interceptor.annotation.PostConstruct;
+    import io.github.lukwalczak1.framework.container.annotations.injection.NotNull;
+    import io.github.lukwalczak1.framework.container.annotations.injection.Value;
+    import io.github.lukwalczak1.framework.interceptor.annotation.InterceptedBy;
     import io.github.lukwalczak1.framework.exception.ValidationException;
-    import io.github.lukwalczak1.framework.interceptor.MethodInterceptor;
+    import io.github.lukwalczak1.framework.interceptor.interfaces.MethodInterceptor;
     import io.github.lukwalczak1.framework.scope.annotation.RequestScoped;
     import io.github.lukwalczak1.framework.scope.implementation.ApplicationScope;
     import io.github.lukwalczak1.framework.scope.implementation.RequestScope;
@@ -288,7 +288,7 @@
 
         public List<String> scanForAvailableAnnotations() {
             try (ScanResult scanResult = new ClassGraph()
-                    .acceptPackages("io.github.lukwalczak1.framework.annotation.beans")
+                    .acceptPackages("io.github.lukwalczak1.framework.container.annotations.beans")
                     .enableClassInfo()
                     .scan()) {
                 return scanResult

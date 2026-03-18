@@ -1,6 +1,6 @@
-package io.github.lukwalczak1.framework.annotation.interceptor;
+package io.github.lukwalczak1.framework.interceptor.annotation;
 
-import io.github.lukwalczak1.framework.interceptor.MethodInterceptor;
+import io.github.lukwalczak1.framework.interceptor.interfaces.MethodInterceptor;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;

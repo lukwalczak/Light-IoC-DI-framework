@@ -1,4 +1,4 @@
-package io.github.lukwalczak1.framework.annotation.beans;
+package io.github.lukwalczak1.framework.exception.annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -6,6 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-public @interface Repository {
+@Target(ElementType.METHOD)
+public @interface ExceptionHandler {
+    Class<? extends Throwable> value();
 }

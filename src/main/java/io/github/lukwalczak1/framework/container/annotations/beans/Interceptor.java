@@ -1,4 +1,4 @@
-package io.github.lukwalczak1.framework.annotation.beans;
+package io.github.lukwalczak1.framework.container.annotations.beans;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

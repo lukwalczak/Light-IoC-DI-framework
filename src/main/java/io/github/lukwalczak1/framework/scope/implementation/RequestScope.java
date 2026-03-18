@@ -1,6 +1,6 @@
 package io.github.lukwalczak1.framework.scope.implementation;
 
-import io.github.lukwalczak1.framework.annotation.interceptor.PreDestroy;
+import io.github.lukwalczak1.framework.interceptor.annotation.PreDestroy;
 import io.github.lukwalczak1.framework.scope.interfaces.AbstractScope;
 
 import java.lang.reflect.Method;
