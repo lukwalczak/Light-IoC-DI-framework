@@ -23,9 +23,8 @@
     import net.bytebuddy.matcher.ElementMatchers;
 
     public class BeanFactory {
-        private static BeanFactory instance;
 
-        private Map<Class<?>, Object> beans = new HashMap<>();
+        private static BeanFactory instance;
 
         private Map<Class<?>, Class<?>> interfaceToImpl = new HashMap<>();
 
@@ -54,8 +53,8 @@
             System.out.println("BeanFactory initialized correctly");
         }
 
-        public Set<Class<?>> getRegisteredBeans() {
-            return beans.keySet();
+        public Set<Class<?>> getRegisteredBeanClasses() {
+            return beanClasses;
         }
 
         private void populateClassFields(Object object, Class<?> clazz){
@@ -163,12 +162,14 @@
                 return (T) existing;
             }
 
-            if(targetClass.isAnnotationPresent(Lazy.class) && !beans.containsKey(targetClass)) {
-//                System.out.println("Creating lazy proxy for " + targetClass.getName());
-                Object proxy = wrapWithLazyProxy(targetClass);
-                if (scopeRegistry.getBeanScope(targetClass) instanceof ApplicationScope) {
-                    beans.put(targetClass, proxy);
+            if(targetClass.isAnnotationPresent(Lazy.class)) {
+                Scope scope = scopeRegistry.getBeanScope(targetClass);
+                Object instance = scope.getIfPresent(targetClass);
+                if(instance != null){
+                    return (T) instance;
                 }
+                Object proxy = wrapWithLazyProxy(targetClass);
+                return (T) beanScope.get(targetClass, () -> proxy);
             }
 
             return (T) beanScope.get(objectClass, () -> objectClass.cast(createBean(targetClass)));
@@ -320,9 +321,8 @@
             for (Class<?> clazz : beanClasses) {
                 Scope scope = scopeRegistry.getBeanScope(clazz);
                 if (scope.getClass().equals(ApplicationScope.class)) {
-//                    System.out.println("Pre-instantiating singleton: " + clazz.getName());
-                    Object bean = getBean(clazz);
-                    beans.put(clazz, bean);
+                    //System.out.println("Pre-instantiating singleton: " + clazz.getName());
+                     getBean(clazz);
                 }
             }
         }
@@ -347,25 +347,12 @@
             return (RequestScope) scopeRegistry.getScope(RequestScoped.class);
         }
 
-        public <T> List<T> getBeansOfType(Class<T> type) {
-            List<T> result = new ArrayList<>();
-            for (Map.Entry<Class<?>, Object> entry : beans.entrySet()) {
-                Class<?> beanClass = entry.getKey();
-                Object beanInstance = entry.getValue();
-
-                if (type.isAssignableFrom(beanClass)) {
-                    result.add(type.cast(beanInstance));
-                }
-            }
-            return result;
-        }
-
         public Set<Class<?>> getBeanClasses() {
             return beanClasses;
         }
 
         public Object materializeBean(Class<?> targetClass) {
-            Object existing = beans.get(targetClass);
+            Object existing = scopeRegistry.getBeanScope(targetClass).getIfPresent(targetClass);
             if (existing != null) return existing;
 
             Scope beanScope = scopeRegistry.getBeanScope(targetClass);
