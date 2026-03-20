@@ -10,12 +10,17 @@ import io.github.lukwalczak1.framework.web.annotations.PathVariable;
 import io.github.lukwalczak1.framework.container.BeanFactory;
 import io.github.lukwalczak1.framework.web.annotations.RequestMapping;
 import io.github.lukwalczak1.framework.container.annotations.beans.Controller;
+import io.github.lukwalczak1.framework.web.records.DynamicRouteDefinition;
+import io.github.lukwalczak1.framework.web.records.MethodInvocation;
+import io.github.lukwalczak1.framework.web.records.RouteDefinition;
 import io.github.lukwalczak1.framework.web.response.ResponseCodes;
 import io.github.lukwalczak1.framework.web.response.ResponseEntity;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -26,7 +31,8 @@ import static io.github.lukwalczak1.framework.web.response.ResponseCodes.NOT_FOU
 
 public class DispatcherHandler implements HttpHandler {
 
-    private final Map<String, RouteDefinition> routes = new HashMap<>();
+    private final List<DynamicRouteDefinition> dynamicRoutes = new ArrayList<>();
+    private final Map<String, RouteDefinition> staticRoutes = new HashMap<>();
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -37,40 +43,48 @@ public class DispatcherHandler implements HttpHandler {
         registerRoutes();
     }
 
-    private void registerRoute(String path, String method, RouteDefinition routeDefinition) {
-        routes.put(method + ":" + path, routeDefinition);
-    }
-
     private void registerRoutes() {
         beanFactory.getBeanClasses().forEach(beanClass -> {
             if (!beanClass.isAnnotationPresent(Controller.class)) {
                 return;
             }
             String basePath = "";
+            // If controller has @RequestMapping annotation, we use its value as base path for all routes in this controller
             if (beanClass.isAnnotationPresent(RequestMapping.class)) {
                 basePath = beanClass.getAnnotation(RequestMapping.class).value();
             }
 
+            // Method specific @RequestMapping annotations will be registered with full path = base path + method path
             for (Method method : beanClass.getDeclaredMethods()) {
                 if (method.isAnnotationPresent(RequestMapping.class)) {
                     RequestMapping reqMapping = method.getAnnotation(RequestMapping.class);
                     String fullPath = basePath + reqMapping.value();
-                    registerRoute(fullPath, reqMapping.method(), new RouteDefinition(beanClass, method));
+
+                    // Checking if base path contains path variable, if it does we skip registering this controller as it would require more complex path matching logic
+                    if(fullPath.matches(".*\\{[^/]+}.*")){
+                        dynamicRoutes.add(new DynamicRouteDefinition(reqMapping.method(), fullPath, new RouteDefinition(beanClass, method)));
+                    }else {
+                        staticRoutes.put(reqMapping.method() + ":" + fullPath, new RouteDefinition(beanClass, method));
+                    }
                 }
             }
 
         });
     }
 
-    public Object[] determineInvocationArgs(MethodInvocation invocation, HttpExchange exchange) throws IOException {
+    public Object[] determineInvocationArgs(MethodInvocation invocation, HttpExchange exchange, Map<String, String> pathVariables) throws IOException {
         Method method = invocation.getMethod();
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = new Object[paramTypes.length];
         String requestBody = exchange.getRequestBody() != null ? new String(exchange.getRequestBody().readAllBytes()) : "";
-        String path = exchange.getRequestURI().getPath();
         for(int i = 0; i < paramTypes.length; i++){
-            if(paramTypes[i] == String.class && method.getParameters()[i].isAnnotationPresent(PathVariable.class)){
-                args[i] = path;
+            if(method.getParameters()[i].isAnnotationPresent(PathVariable.class)){
+                Parameter parameter = method.getParameters()[i];
+                Object value = pathVariables.get(parameter.getName());
+                if(parameter.getType() != String.class){
+                    value = objectMapper.convertValue(value, parameter.getType());
+                }
+                args[i] = value;
             }else if(method.getParameters()[i].isAnnotationPresent(RequestBody.class)){
                 try {
                     args[i] = objectMapper.readValue(requestBody, paramTypes[i]);
@@ -87,27 +101,37 @@ public class DispatcherHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        System.out.println("Handling request: " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
+        System.out.println("DispatcherHandler: handle: Handling request: " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
         // Handler interceptors logic
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
-        RouteDefinition route = routes.get(method + ":" + path);
+        RouteDefinition route = staticRoutes.get(method + ":" + path);
+        Map<String, String> pathVariables = new HashMap<>();
+        if (route == null) {
+            for (DynamicRouteDefinition dynamicRoute : dynamicRoutes) {
+                if (dynamicRoute.matches(method, path)) {
+                    route = dynamicRoute.getRouteDefinition();
+                    pathVariables = dynamicRoute.extractPathVariables(path);
+                    break;
+                }
+            }
+        }
         if (route == null) {
             sendResponse(exchange, NOT_FOUND);
+            exchange.close();
             return;
         }
         try {
             Object controllerInstance = beanFactory.getBean(route.controllerClass());
-
             MethodInvocation invocation = new MethodInvocation(controllerInstance, route.method());
-            Object[] args = determineInvocationArgs(invocation, exchange);
-
+            Object[] args = determineInvocationArgs(invocation, exchange, pathVariables);
             sendResponse(exchange, invocation.invoke(args));
         }catch (InvocationTargetException e) {
             Throwable realCause = e.getCause();
             realCause.printStackTrace();
             sendResponse(exchange, 500);
         } catch (Exception e) {
+            System.out.println("Error handling request: " + e);
             Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
             Class<?> controllerClass = route.controllerClass();
             if (controllerClass.getName().contains("ByteBuddy")) {

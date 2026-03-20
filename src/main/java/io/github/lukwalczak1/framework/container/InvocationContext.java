@@ -1,7 +1,7 @@
 package io.github.lukwalczak1.framework.container;
 
 import io.github.lukwalczak1.framework.interceptor.interfaces.MethodInterceptor;
-import io.github.lukwalczak1.framework.web.MethodInvocation;
+import io.github.lukwalczak1.framework.web.records.MethodInvocation;
 
 import java.util.List;
 

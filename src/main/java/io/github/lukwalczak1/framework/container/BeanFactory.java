@@ -16,7 +16,7 @@
     import io.github.lukwalczak1.framework.scope.implementation.ApplicationScope;
     import io.github.lukwalczak1.framework.scope.implementation.RequestScope;
     import io.github.lukwalczak1.framework.scope.interfaces.Scope;
-    import io.github.lukwalczak1.framework.web.MethodInvocation;
+    import io.github.lukwalczak1.framework.web.records.MethodInvocation;
     import net.bytebuddy.ByteBuddy;
     import net.bytebuddy.implementation.InvocationHandlerAdapter;
     import net.bytebuddy.matcher.ElementMatchers;
@@ -49,6 +49,8 @@
             registerBeanDefinitions(candidateClasses);
 
             preInstantiateSingletons();
+
+            System.out.println("BeanFactory initialized correctly");
         }
 
         public Set<Class<?>> getRegisteredBeans() {
@@ -136,7 +138,7 @@
 
         private Object wrapWithLazyProxy(Class<?> targetClass){
             try{
-                System.out.println("Creating lazy proxy for " + targetClass.getName());
+//                System.out.println("Creating lazy proxy for " + targetClass.getName());
                 return new ByteBuddy()
                         .subclass(targetClass)
                         .method(ElementMatchers.any())
@@ -161,7 +163,7 @@
             }
 
             if(targetClass.isAnnotationPresent(Lazy.class) && !beans.containsKey(targetClass)) {
-                System.out.println("Creating lazy proxy for " + targetClass.getName());
+//                System.out.println("Creating lazy proxy for " + targetClass.getName());
                 return (T) wrapWithLazyProxy(targetClass);
             }
 
@@ -249,7 +251,7 @@
 
         private Set<Class<?>> discoverCandidateClasses(String targetPackage) {
             List<String> annotationNames = scanForAvailableAnnotations();
-            System.out.println("Found annotations: " + annotationNames);
+//            System.out.println("Found annotations: " + annotationNames);
             Set<Class<?>> annotatedClasses = new HashSet<>();
             try (ScanResult scanResult = new ClassGraph()
                     .acceptPackages(targetPackage)
@@ -279,8 +281,9 @@
             for (Class<?> clazz : beanClasses) {
                 Scope scope = scopeRegistry.getBeanScope(clazz);
                 if (scope.getClass().equals(ApplicationScope.class)) {
-                    System.out.println("Pre-instantiating singleton: " + clazz.getName());
-                    getBean(clazz);
+//                    System.out.println("Pre-instantiating singleton: " + clazz.getName());
+                    Object bean = getBean(clazz);
+                    beans.put(clazz, bean);
                 }
             }
         }
