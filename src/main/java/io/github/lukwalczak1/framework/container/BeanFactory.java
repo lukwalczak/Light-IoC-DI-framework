@@ -53,10 +53,6 @@
             System.out.println("BeanFactory initialized correctly");
         }
 
-        public Set<Class<?>> getRegisteredBeanClasses() {
-            return beanClasses;
-        }
-
         private void populateClassFields(Object object, Class<?> clazz){
             Class<?> currentClass = clazz;
             // Unwrapping proxy to get original class for field injection

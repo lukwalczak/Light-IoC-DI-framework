@@ -146,7 +146,7 @@ public class DispatcherHandler implements HttpHandler {
     }
 
     private List<Class<?>> getBeanClassesWithAnnotation(Class<? extends java.lang.annotation.Annotation> annotation) {
-        return beanFactory.getRegisteredBeanClasses().
+        return beanFactory.getBeanClasses().
                 stream().filter(beanClass -> beanClass.isAnnotationPresent(annotation)).collect(Collectors.toList());
     }
 
