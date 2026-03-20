@@ -4,6 +4,7 @@
     import java.lang.reflect.*;
 
     import io.github.classgraph.*;
+    import io.github.lukwalczak1.framework.scope.annotation.ApplicationScoped;
     import io.github.lukwalczak1.framework.scope.annotation.Lazy;
     import io.github.lukwalczak1.framework.container.annotations.injection.Inject;
     import io.github.lukwalczak1.framework.interceptor.annotation.PostConstruct;
@@ -164,7 +165,10 @@
 
             if(targetClass.isAnnotationPresent(Lazy.class) && !beans.containsKey(targetClass)) {
 //                System.out.println("Creating lazy proxy for " + targetClass.getName());
-                return (T) wrapWithLazyProxy(targetClass);
+                Object proxy = wrapWithLazyProxy(targetClass);
+                if (scopeRegistry.getBeanScope(targetClass) instanceof ApplicationScope) {
+                    beans.put(targetClass, proxy);
+                }
             }
 
             return (T) beanScope.get(objectClass, () -> objectClass.cast(createBean(targetClass)));
@@ -221,10 +225,45 @@
             Class<?>[] parameterTypes = constructor.getParameterTypes();
             Object[] parameters = new Object[parameterTypes.length];
             for (int i = 0; i < parameterTypes.length; i++) {
+                //Check for circular dependencies
+                if(parameterTypes[i].equals(targetClass)){
+                    throw new RuntimeException("Circular dependency detected: " + targetClass.getName() + " depends on itself.");
+                }
+                if(parameterTypes[i].getDeclaredConstructors().length == 0){
+                    throw new RuntimeException("Cannot inject dependency: " + parameterTypes[i].getName() + " has no constructors.");
+                }
+                if(checkCricularDependency(parameterTypes[i], new HashSet<>())){
+                    Object dependency = scopeRegistry.getBeanScope(parameterTypes[i]).getIfPresent(parameterTypes[i]);
+                    if(dependency == null){
+                        dependency = wrapWithLazyProxy(parameterTypes[i]);
+                        parameters[i] = dependency;
+                    }else {
+                        parameters[i] = dependency;
+                    }
+                    continue;
+                }
                 parameters[i] = getBean(parameterTypes[i]);
             }
 
+
             return constructor.newInstance(parameters);
+        }
+
+        private boolean checkCricularDependency(Class<?> targetClass, Set<Class<?>> visited) {
+            if (visited.contains(targetClass)) {
+                return true; // Circular dependency detected
+            }
+            visited.add(targetClass);
+            Constructor<?>[] constructors = targetClass.getDeclaredConstructors();
+            for (Constructor<?> constructor : constructors) {
+                for (Class<?> paramType : constructor.getParameterTypes()) {
+                    if (checkCricularDependency(paramType, visited)) {
+                        return true;
+                    }
+                }
+            }
+            visited.remove(targetClass);
+            return false;
         }
 
         private void validateNotNullFields(Object instance) throws Exception {
