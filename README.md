@@ -88,11 +88,22 @@ public class SimpleController {
     
     @InterceptedBy(BasicInterceptor.class)
     @RequestMapping(value = "/api/hello", method = "GET")
-    public ResponseEntity<String> sayHello(@PathVariable String path) {
+    public ResponseEntity<String> sayHello() {
         simpleService.executeBusinessLogic();
         return new ResponseEntity<>(200, "Success!");
     }
     
+    @RequestMapping(value = "/api/hello/{id}", method = "GET")
+    public ResponseEntity<String> sayHelloWithId(@PathVariable("id") String id) {
+        simpleService.executeSomeBusinessLogic(id);
+        return new ResponseEntity<>(200, "Success!");
+    }
+
+    @RequestMapping(value = "/api/hello/{id}", method = "GET")
+    public ResponseEntity<String> sayHelloWithReqBody(@RequestBody String body) {
+        simpleService.executeSomeMoreBusinessLogic(body);
+        return new ResponseEntity<>(200, "Success!");
+    }
 }
 ```
 
