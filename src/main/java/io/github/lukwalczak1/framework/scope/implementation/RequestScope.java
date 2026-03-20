@@ -17,6 +17,11 @@ public class RequestScope extends AbstractScope {
     private final ThreadLocal<Map<Class<?>, Object>> requestBeans = ThreadLocal.withInitial(HashMap::new);
 
     @Override
+    public Map<Class<?>, Object> getAllInstances() {
+        return requestBeans.get();
+    }
+
+    @Override
     public Object get(Class<?> beanClass, Supplier<Object> objectFactory) {
         Map<Class<?>, Object> map = requestBeans.get();
         Object existing = map.get(beanClass);

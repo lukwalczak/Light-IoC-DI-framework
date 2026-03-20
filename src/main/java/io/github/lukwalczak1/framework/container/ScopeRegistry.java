@@ -20,7 +20,7 @@ public class ScopeRegistry {
         scopeMap.put(PrototypeScoped.class, new PrototypeScope());
     }
 
-    public Scope getScope(Class<? extends Annotation> annotationClass) {
+    public Scope getScope(Class<? extends Annotation > annotationClass) {
         return scopeMap.get(annotationClass);
     }
 

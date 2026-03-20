@@ -12,6 +12,11 @@ public abstract class AbstractScope implements Scope {
 
     protected Map<Class<?>, Object> instances = new ConcurrentHashMap<>();
 
+
+    public Map<Class<?>, Object> getAllInstances() {
+        return instances;
+    }
+
     @Override
     public Object get(Class<?> beanClass, Supplier<Object> objectFactory) {
         Object instance = instances.get(beanClass);
