@@ -171,13 +171,13 @@ The project is under active development.
 - [x] Lazy initialization for beans
 - [x] Application Scope, Request Scope support and Prototype Scope.
 - [x] Bean lifecycle callbacks (`@PostConstruct`, `@PreDestroy`).]
+- [x] @PathVariable for query parameters.
 - [ ] View, Session Scope support.
 - [ ] Circular dependency detection and resolution.
 - [ ] Java-based configuration
 - [ ] More complex Bean validation
 - [ ] Handling multipart/form-data requests.
 - [ ] Bean profiling for performance monitoring.
-- [ ] @RequestParam for query parameters.
 - [ ] Session management and cookie handling.
 - [ ] Static resource handling (serving HTML/CSS/JS).
 - [ ] Unit Testing (JUnit 5) for core components.
