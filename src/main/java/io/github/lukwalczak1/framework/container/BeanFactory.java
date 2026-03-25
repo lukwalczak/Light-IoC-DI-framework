@@ -2,8 +2,10 @@
 
     import java.util.*;
     import java.lang.reflect.*;
+    import java.util.stream.Collectors;
 
     import io.github.classgraph.*;
+    import io.github.lukwalczak1.framework.container.annotations.injection.Primary;
     import io.github.lukwalczak1.framework.scope.annotation.ApplicationScoped;
     import io.github.lukwalczak1.framework.scope.annotation.Lazy;
     import io.github.lukwalczak1.framework.container.annotations.injection.Inject;
@@ -26,7 +28,7 @@
 
         private static BeanFactory instance;
 
-        private Map<Class<?>, Class<?>> interfaceToImpl = new HashMap<>();
+        private Map<Class<?>, List<Class<?>>> interfaceToImpl = new HashMap<>();
 
         private ScopeRegistry scopeRegistry = new ScopeRegistry();
 
@@ -151,7 +153,9 @@
 
         @SuppressWarnings("unchecked")
         public <T> T getBean(Class<T> objectClass) {
+            System.out.println(objectClass);
             Class<?> targetClass = resolveTargetClass(objectClass);
+            System.out.println(targetClass);
             Scope beanScope = scopeRegistry.getBeanScope(targetClass);
             Object existing = beanScope.getIfPresent(targetClass);
             if (existing != null) {
@@ -195,11 +199,21 @@
 
         private Class<?> resolveTargetClass(Class<?> objectClass) {
             if (objectClass.isInterface()) {
-                Class<?> targetClass = interfaceToImpl.get(objectClass);
-                if (targetClass == null) {
+                List<Class<?>> implementations = interfaceToImpl.get(objectClass);
+                if (implementations == null || implementations.isEmpty()) {
                     throw new RuntimeException("No implementation found for interface: " + objectClass.getName());
                 }
-                return targetClass;
+                List<Class<?>> primaryImplementations = implementations.stream().filter(impl ->impl.isAnnotationPresent(Primary.class)).toList();
+                if(primaryImplementations.size() > 1){
+                    throw new RuntimeException("Multiple implementations of " + objectClass.getName() + " are marked as @Primary. Please ensure only one implementation is annotated with @Primary.");
+                } else if (primaryImplementations.size() == 1) {
+                    return primaryImplementations.getFirst();
+                }else {
+                    if(implementations.size()>1){
+                        throw new RuntimeException("Multiple implementations found for interface: " + objectClass.getName() + ". Please annotate one with @Primary or inject a List of implementations.");
+                    }
+                    return implementations.getFirst();
+                }
             }
             return objectClass;
         }
@@ -226,9 +240,7 @@
                 if(parameterTypes[i].equals(targetClass)){
                     throw new RuntimeException("Circular dependency detected: " + targetClass.getName() + " depends on itself.");
                 }
-                if(parameterTypes[i].getDeclaredConstructors().length == 0){
-                    throw new RuntimeException("Cannot inject dependency: " + parameterTypes[i].getName() + " has no constructors.");
-                }
+                // If circular dependency is detected, inject a lazy proxy instead of the actual bean
                 if(checkCricularDependency(parameterTypes[i], new HashSet<>())){
                     Object dependency = scopeRegistry.getBeanScope(parameterTypes[i]).getIfPresent(parameterTypes[i]);
                     if(dependency == null){
@@ -237,9 +249,18 @@
                     }else {
                         parameters[i] = dependency;
                     }
-                    continue;
+                    // Check for interfaces list
+                }else if(parameterTypes[i].equals(List.class)){
+                    ParameterizedType listType = (ParameterizedType) constructor.getGenericParameterTypes()[i];
+                    Class<?> listClass = (Class<?>) listType.getActualTypeArguments()[0];
+                    List<Object> implementations = new ArrayList<>();
+                    for(Class<?> impl : interfaceToImpl.getOrDefault(listClass, List.of())) {
+                        implementations.add(getBean(impl));
+                    }
+                    parameters[i] = implementations;
+                }else{
+                    parameters[i] = getBean(parameterTypes[i]);
                 }
-                parameters[i] = getBean(parameterTypes[i]);
             }
 
 
@@ -308,7 +329,7 @@
             for (Class<?> clazz : candidateClasses) {
                 beanClasses.add(clazz);
                 for (Class<?> iface : clazz.getInterfaces()) {
-                    interfaceToImpl.put(iface, clazz);
+                    interfaceToImpl.computeIfAbsent(iface, k-> new ArrayList<>()).add(clazz);
                 }
             }
         }
