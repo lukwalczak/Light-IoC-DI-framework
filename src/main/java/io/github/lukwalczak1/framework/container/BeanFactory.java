@@ -1,19 +1,18 @@
     package io.github.lukwalczak1.framework.container;
 
+    import java.lang.annotation.Annotation;
     import java.util.*;
     import java.lang.reflect.*;
-    import java.util.stream.Collectors;
 
     import io.github.classgraph.*;
     import io.github.lukwalczak1.framework.container.annotations.injection.Primary;
-    import io.github.lukwalczak1.framework.scope.annotation.ApplicationScoped;
+    import io.github.lukwalczak1.framework.container.validation.api.FieldValidator;
+    import io.github.lukwalczak1.framework.container.validation.impl.*;
     import io.github.lukwalczak1.framework.scope.annotation.Lazy;
     import io.github.lukwalczak1.framework.container.annotations.injection.Inject;
     import io.github.lukwalczak1.framework.interceptor.annotation.PostConstruct;
-    import io.github.lukwalczak1.framework.container.annotations.injection.NotNull;
     import io.github.lukwalczak1.framework.container.annotations.injection.Value;
     import io.github.lukwalczak1.framework.interceptor.annotation.InterceptedBy;
-    import io.github.lukwalczak1.framework.exception.ValidationException;
     import io.github.lukwalczak1.framework.interceptor.interfaces.MethodInterceptor;
     import io.github.lukwalczak1.framework.scope.annotation.RequestScoped;
     import io.github.lukwalczak1.framework.scope.implementation.ApplicationScope;
@@ -37,6 +36,12 @@
         private static String basePackage = "io.github.lukwalczak1";
 
         private Set<Class<?>> beanClasses = new HashSet<>();
+
+        private final List<FieldValidator> fieldValidators = List.of(
+                new NotNullValidator(),
+                new MinValidator(),
+                new MaxValidator()
+        );
 
         public static BeanFactory getInstance() {
             if (instance == null) {
@@ -181,7 +186,7 @@
                 populateClassFields(instance, targetClass);
 
                 // Validation of @NotNull fields
-                validateNotNullFields(instance);
+                validateBeanFields(instance);
 
                 // PostConstruct initialization
                 invokePostConstruct(instance, targetClass);
@@ -190,6 +195,7 @@
                 return wrapWithProxy(instance, targetClass);
 
             } catch (Exception e) {
+                System.out.println("Error creating bean of type " + targetClass.getName() + ": " + e.getMessage());
                 throw new RuntimeException("Failed to create bean: " + targetClass.getName(), e);
             }
         }
@@ -281,14 +287,14 @@
             return false;
         }
 
-        private void validateNotNullFields(Object instance) throws Exception {
+        private void validateBeanFields(Object instance) throws Exception {
             for (Field f : instance.getClass().getDeclaredFields()) {
-                if (f.isAnnotationPresent(NotNull.class)) {
-                    f.setAccessible(true);
-                    Object value = f.get(instance);
-                    if (value == null) {
-                        throw new ValidationException("Field " + f.getName() + " in class " +
-                                instance.getClass().getName() + " is marked as @NotNull but was not injected.");
+                f.setAccessible(true);
+                for(Annotation annotation : f.getAnnotations()){
+                    for(FieldValidator validator : fieldValidators){
+                        if(validator.supports(annotation)){
+                            validator.validate(f, f.get(instance), annotation);
+                        }
                     }
                 }
             }
