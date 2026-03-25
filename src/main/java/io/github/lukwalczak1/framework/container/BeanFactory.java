@@ -136,7 +136,6 @@
 
         private Object wrapWithLazyProxy(Class<?> targetClass){
             try{
-//                System.out.println("Creating lazy proxy for " + targetClass.getName());
                 return new ByteBuddy()
                         .subclass(targetClass)
                         .method(ElementMatchers.any())
@@ -153,9 +152,7 @@
 
         @SuppressWarnings("unchecked")
         public <T> T getBean(Class<T> objectClass) {
-            System.out.println(objectClass);
             Class<?> targetClass = resolveTargetClass(objectClass);
-            System.out.println(targetClass);
             Scope beanScope = scopeRegistry.getBeanScope(targetClass);
             Object existing = beanScope.getIfPresent(targetClass);
             if (existing != null) {
@@ -308,7 +305,6 @@
 
         private Set<Class<?>> discoverCandidateClasses(String targetPackage) {
             List<String> annotationNames = scanForAvailableAnnotations();
-//            System.out.println("Found annotations: " + annotationNames);
             Set<Class<?>> annotatedClasses = new HashSet<>();
             try (ScanResult scanResult = new ClassGraph()
                     .acceptPackages(targetPackage)
@@ -338,7 +334,6 @@
             for (Class<?> clazz : beanClasses) {
                 Scope scope = scopeRegistry.getBeanScope(clazz);
                 if (scope.getClass().equals(ApplicationScope.class)) {
-                    //System.out.println("Pre-instantiating singleton: " + clazz.getName());
                      getBean(clazz);
                 }
             }
