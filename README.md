@@ -173,7 +173,7 @@ The framework uses **ByteBuddy** to create dynamic proxies for classes that have
 ## ⚠️ Current Status
 The project is under active development.
 - [x] Constructor-based Injection.
-- [x] Interface-to-Implementation resolution.
+- [x] Interface-to-Implementation with multiple implementations support.
 - [x] Dynamic Proxy mechanism for Interceptors.
 - [x] JSON Response/Request handling.
 - [x] `@Value` annotation for external configuration (`.properties`).
@@ -183,8 +183,8 @@ The project is under active development.
 - [x] Application Scope, Request Scope support and Prototype Scope.
 - [x] Bean lifecycle callbacks (`@PostConstruct`, `@PreDestroy`).]
 - [x] @PathVariable for query parameters.
+- [x] Circular dependency detection and resolution.
 - [ ] View, Session Scope support.
-- [ ] Circular dependency detection and resolution.
 - [ ] Java-based configuration
 - [ ] More complex Bean validation
 - [ ] Handling multipart/form-data requests.
