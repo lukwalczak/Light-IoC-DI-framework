@@ -40,7 +40,8 @@
         private final List<FieldValidator> fieldValidators = List.of(
                 new NotNullValidator(),
                 new MinValidator(),
-                new MaxValidator()
+                new MaxValidator(),
+                new PatternValidator()
         );
 
         public static BeanFactory getInstance() {
