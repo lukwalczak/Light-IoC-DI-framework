@@ -18,11 +18,11 @@ public class MinValidator implements FieldValidator {
         if(value == null) {
             return;
         }
-        if(field.getType().isAssignableFrom(Number.class)) {
+        if(!(value instanceof Number)) {
             throw new ValidationException("Field " + field.getName() + " must be a number for Min validation.");
         }
         long minValue = ((Min) annotation).value();
-        long fieldValue = ((Number) field.getType().cast(value)).longValue();
+        long fieldValue = ((Number) value).longValue();
         if (fieldValue < minValue) {
             throw new ValidationException("Field " + field.getName() + " must be at least " + minValue + ".");
         }

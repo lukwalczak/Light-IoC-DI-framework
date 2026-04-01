@@ -18,7 +18,7 @@ public class MaxValidator implements FieldValidator {
         if(value == null) {
             return;
         }
-        if(!Number.class.isAssignableFrom(field.getType())) {
+        if(!(value instanceof Number)) {
             throw new ValidationException("Field " + field.getName() + " must be a number for Max validation.");
         }
         long maxValue = ((Max) annotation).value();
