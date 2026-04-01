@@ -41,7 +41,8 @@
                 new NotNullValidator(),
                 new MinValidator(),
                 new MaxValidator(),
-                new PatternValidator()
+                new PatternValidator(),
+                new ClassValidator()
         );
 
         public static BeanFactory getInstance() {
