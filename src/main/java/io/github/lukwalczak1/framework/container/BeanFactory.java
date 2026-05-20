@@ -6,8 +6,8 @@
 
     import io.github.classgraph.*;
     import io.github.lukwalczak1.framework.container.annotations.injection.Primary;
+    import io.github.lukwalczak1.framework.container.validation.ValidationEngine;
     import io.github.lukwalczak1.framework.container.validation.api.FieldValidator;
-    import io.github.lukwalczak1.framework.container.validation.impl.*;
     import io.github.lukwalczak1.framework.scope.annotation.Lazy;
     import io.github.lukwalczak1.framework.container.annotations.injection.Inject;
     import io.github.lukwalczak1.framework.interceptor.annotation.PostConstruct;
@@ -37,13 +37,7 @@
 
         private Set<Class<?>> beanClasses = new HashSet<>();
 
-        private final List<FieldValidator> fieldValidators = List.of(
-                new NotNullValidator(),
-                new MinValidator(),
-                new MaxValidator(),
-                new PatternValidator(),
-                new ClassValidator()
-        );
+        private final ValidationEngine validationEngine = new ValidationEngine();
 
         public static BeanFactory getInstance() {
             if (instance == null) {
@@ -57,9 +51,28 @@
 
             registerBeanDefinitions(candidateClasses);
 
+            registerCustomValidators();
+
             preInstantiateSingletons();
 
             System.out.println("BeanFactory initialized correctly");
+        }
+
+        private void registerCustomValidators() {
+            List<Class<?>> validatorClasses = interfaceToImpl.getOrDefault(FieldValidator.class, List.of());
+
+            for (Class<?> validatorClass : validatorClasses) {
+                try {
+                    Constructor<?> constructor = validatorClass.getDeclaredConstructor();
+                    constructor.setAccessible(true);
+                    FieldValidator customValidator = (FieldValidator) constructor.newInstance();
+
+                    validationEngine.addValidator(customValidator);
+                    System.out.println("Successfully registered custom validator: " + validatorClass.getSimpleName());
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to register custom validator: " + validatorClass.getName(), e);
+                }
+            }
         }
 
         private void populateClassFields(Object object, Class<?> clazz){
@@ -293,11 +306,7 @@
             for (Field f : instance.getClass().getDeclaredFields()) {
                 f.setAccessible(true);
                 for(Annotation annotation : f.getAnnotations()){
-                    for(FieldValidator validator : fieldValidators){
-                        if(validator.supports(annotation)){
-                            validator.validate(f, f.get(instance), annotation);
-                        }
-                    }
+                    validationEngine.validateField(f, f.get(instance), annotation);
                 }
             }
         }
@@ -325,10 +334,12 @@
                             .filter(classInfo -> classInfo.hasAnnotation(annotationName))
                             .forEach(classInfo -> annotatedClasses.add(classInfo.loadClass()));
                 });
+
+                scanResult.getClassesImplementing(FieldValidator.class.getName())
+                        .forEach(classInfo -> annotatedClasses.add(classInfo.loadClass()));
             }
             return annotatedClasses;
         }
-
         private void registerBeanDefinitions(Set<Class<?>> candidateClasses) {
             for (Class<?> clazz : candidateClasses) {
                 beanClasses.add(clazz);
