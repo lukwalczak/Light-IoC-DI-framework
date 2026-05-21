@@ -2,11 +2,12 @@ package io.github.lukwalczak1.framework.container;
 
 import java.lang.reflect.Method;
 
-public class LazyInterceptor implements java.lang.reflect.InvocationHandler{
+public class LazyInterceptor implements java.lang.reflect.InvocationHandler {
 
     private final BeanFactory beanFactory;
-
     private final Class<?> targetClass;
+
+    private Object targetInstance;
 
     public LazyInterceptor(BeanFactory beanFactory, Class<?> targetClass) {
         this.beanFactory = beanFactory;
@@ -15,7 +16,10 @@ public class LazyInterceptor implements java.lang.reflect.InvocationHandler{
 
     @Override
     public synchronized Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        Object instance =  beanFactory.materializeBean(targetClass);
-        return method.invoke(instance, args);
+        if (targetInstance == null) {
+            targetInstance = beanFactory.createLazyTarget(targetClass);
+        }
+
+        return method.invoke(targetInstance, args);
     }
 }

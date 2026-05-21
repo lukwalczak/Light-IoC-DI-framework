@@ -390,4 +390,8 @@
             return beanScope.get(targetClass, () -> createBean(targetClass));
         }
 
+        Object createLazyTarget(Class<?> targetClass) {
+            return createBean(targetClass);
+        }
+
     }
