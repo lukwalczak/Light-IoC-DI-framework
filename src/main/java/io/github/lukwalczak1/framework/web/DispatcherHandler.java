@@ -78,10 +78,15 @@ public class DispatcherHandler implements HttpHandler {
         Object[] args = new Object[paramTypes.length];
         String requestBody = exchange.getRequestBody() != null ? new String(exchange.getRequestBody().readAllBytes()) : "";
         for(int i = 0; i < paramTypes.length; i++){
-            if(method.getParameters()[i].isAnnotationPresent(PathVariable.class)){
+            if (method.getParameters()[i].isAnnotationPresent(PathVariable.class)) {
                 Parameter parameter = method.getParameters()[i];
-                Object value = pathVariables.get(parameter.getName());
-                if(parameter.getType() != String.class){
+                PathVariable annotation = parameter.getAnnotation(PathVariable.class);
+                String variableName = annotation.value().isBlank()
+                        ? parameter.getName()
+                        : annotation.value();
+
+                Object value = pathVariables.get(variableName);
+                if (value != null && parameter.getType() != String.class) {
                     value = objectMapper.convertValue(value, parameter.getType());
                 }
                 args[i] = value;
@@ -126,23 +131,23 @@ public class DispatcherHandler implements HttpHandler {
             MethodInvocation invocation = new MethodInvocation(controllerInstance, route.method());
             Object[] args = determineInvocationArgs(invocation, exchange, pathVariables);
             sendResponse(exchange, invocation.invoke(args));
-        }catch (InvocationTargetException e) {
-            Throwable realCause = e.getCause();
-            realCause.printStackTrace();
-            sendResponse(exchange, 500);
+        } catch (InvocationTargetException e) {
+            handleControllerException(exchange, route.controllerClass(), e.getCause());
         } catch (Exception e) {
             System.out.println("Error handling request: " + e);
-            Throwable cause = e instanceof InvocationTargetException ? e.getCause() : e;
-            Class<?> controllerClass = route.controllerClass();
-            if (controllerClass.getName().contains("ByteBuddy")) {
-                controllerClass = controllerClass.getSuperclass();
-            }
-            handleException(exchange, controllerClass, cause);
-        }finally {
-            // Clear request-scoped beans after each request
+            handleControllerException(exchange, route.controllerClass(), e);
+        } finally {
             beanFactory.getRequestScope().clear();
         }
         exchange.close();
+    }
+
+    private void handleControllerException(HttpExchange exchange, Class<?> controllerClass, Throwable cause) throws IOException {
+        if (controllerClass.getName().contains("ByteBuddy")) {
+            controllerClass = controllerClass.getSuperclass();
+        }
+
+        handleException(exchange, controllerClass, cause);
     }
 
     private List<Class<?>> getBeanClassesWithAnnotation(Class<? extends java.lang.annotation.Annotation> annotation) {
