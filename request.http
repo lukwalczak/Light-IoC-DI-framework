@@ -1,0 +1,35 @@
+### Health / simple path variable demo
+GET http://localhost:8080/demo/hello/123
+
+###
+
+### POST request body demo
+POST http://localhost:8080/demo/body
+Content-Type: application/json
+
+{
+  "name": "example",
+  "value": 21
+}
+
+###
+
+### Interceptors demo
+GET http://localhost:8080/demo/interceptors
+
+###
+
+### IoC / DI / scopes demo
+GET http://localhost:8080/demo/beans
+
+###
+
+### Local exception handler demo
+GET http://localhost:8080/demo/errors/local
+
+###
+
+### Global exception handler demo
+GET http://localhost:8080/demo/errors/global
+
+###
