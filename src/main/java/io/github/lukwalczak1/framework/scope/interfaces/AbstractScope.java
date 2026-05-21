@@ -26,7 +26,6 @@ public abstract class AbstractScope implements Scope {
                 instance = instances.get(beanClass);
                 if (instance == null) {
                     instance = objectFactory.get();
-                    invokePostConstructMethods(beanClass, instance);
                     instances.put(beanClass, instance);
                 }
             }
