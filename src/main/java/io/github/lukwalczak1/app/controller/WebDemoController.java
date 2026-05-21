@@ -27,7 +27,7 @@ public class WebDemoController {
     }
 
     @RequestMapping(value = "/demo/hello/{id}", method = "GET")
-    public ResponseEntity<String> hello(@PathVariable Integer id) {
+    public ResponseEntity<String> hello(@PathVariable("id") Integer id){
         simpleService.exampleMethod();
         return ResponseEntity.ok("Hello from custom framework. Path variable id = " + id);
     }
